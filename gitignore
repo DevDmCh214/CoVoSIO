@@ -1,0 +1,203 @@
+# ============================================================
+#  CoVoSIO — .gitignore
+#  Spring Boot 3 / Java 21 + React Vite + PostgreSQL + Docker
+# ============================================================
+
+
+# ────────────────────────────────────────────────────────────
+#  BACKEND — Java / Maven / Spring Boot
+# ────────────────────────────────────────────────────────────
+
+# Compiled output
+backend/target/
+backend/*.class
+
+# Maven wrapper logs
+backend/.mvn/wrapper/maven-wrapper.jar
+backend/.mvn/timing.properties
+
+# Spring Boot packaged jar/war
+backend/*.jar
+backend/*.war
+backend/*.ear
+
+# Spring Boot devtools restart trigger
+backend/.reloadtrigger
+
+# Application secrets — ne jamais committer
+backend/src/main/resources/application-prod.yml
+backend/src/main/resources/application-local.yml
+backend/src/main/resources/application-secrets.yml
+backend/src/main/resources/*.p12
+backend/src/main/resources/*.jks
+backend/src/main/resources/*.pem
+
+# Generated Javadoc
+backend/docs/
+
+
+# ────────────────────────────────────────────────────────────
+#  UPLOADS — fichiers soumis par les utilisateurs
+#  (permis, cartes grises — jamais dans le repo)
+# ────────────────────────────────────────────────────────────
+
+uploads/
+backend/uploads/
+**/uploads/documents/
+
+
+# ────────────────────────────────────────────────────────────
+#  FRONTEND — Node / React / Vite
+# ────────────────────────────────────────────────────────────
+
+# Dependencies
+frontend/node_modules/
+
+# Build output
+frontend/dist/
+frontend/build/
+
+# Vite cache
+frontend/.vite/
+
+# Environment files — contiennent les URLs d'API, clés éventuelles
+frontend/.env
+frontend/.env.local
+frontend/.env.development.local
+frontend/.env.test.local
+frontend/.env.production.local
+frontend/.env.production
+
+# Coverage reports
+frontend/coverage/
+
+
+# ────────────────────────────────────────────────────────────
+#  DOCKER
+# ────────────────────────────────────────────────────────────
+
+# Données persistées par les volumes Docker locaux
+docker/postgres-data/
+docker/pgdata/
+.docker/
+
+# Fichier d'environnement Docker — contient mots de passe BDD
+.env
+.env.docker
+docker-compose.override.yml
+
+
+# ────────────────────────────────────────────────────────────
+#  BASE DE DONNÉES
+# ────────────────────────────────────────────────────────────
+
+# Backups locaux (sauf l'exemple fourni dans backups/README.md)
+backups/*.sql
+backups/*.dump
+backups/*.gz
+# Garder le script et le readme
+!backups/backup.sh
+!backups/restore.sh
+!backups/README.md
+
+# Fichiers pgAdmin / DBeaver locaux
+*.pgpass
+*.dmp
+
+
+# ────────────────────────────────────────────────────────────
+#  IDEs et éditeurs
+# ────────────────────────────────────────────────────────────
+
+# IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# Eclipse
+.classpath
+.project
+.settings/
+bin/
+
+# VS Code
+.vscode/
+!.vscode/extensions.json
+!.vscode/settings.json.example
+
+# NetBeans
+nbproject/
+nbbuild/
+nbdist/
+nb-configuration.xml
+
+# STS (Spring Tool Suite)
+.apt_generated
+.factorypath
+
+
+# ────────────────────────────────────────────────────────────
+#  OS
+# ────────────────────────────────────────────────────────────
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+
+
+# ────────────────────────────────────────────────────────────
+#  TESTS et couverture
+# ────────────────────────────────────────────────────────────
+
+# JaCoCo (couverture de code Java)
+backend/target/site/jacoco/
+*.exec
+
+# Jest / Vitest (couverture frontend)
+frontend/coverage/
+frontend/test-results/
+
+
+# ────────────────────────────────────────────────────────────
+#  LOGS
+# ────────────────────────────────────────────────────────────
+
+*.log
+*.log.*
+logs/
+backend/logs/
+spring.log
+
+
+# ────────────────────────────────────────────────────────────
+#  DIVERS
+# ────────────────────────────────────────────────────────────
+
+# Fichiers temporaires
+*.tmp
+*.temp
+*.swp
+*.swo
+
+# Archives
+*.zip
+*.tar.gz
+*.rar
+
+# Certificats SSL locaux (mkcert, etc.)
+*.crt
+*.key
+localhost+*.pem
