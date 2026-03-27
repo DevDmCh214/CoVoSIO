@@ -332,3 +332,78 @@ Maintained at project root. Updated with each feature or fix:
 - [ ] No secrets in committed files
 - [ ] `CHANGELOG.md` updated
 - [ ] An existing endpoint tested manually (non-regression)
+
+---
+
+## 9. Development State
+
+> Keep this section up to date after each phase. It lets Claude resume work
+> without re-reading all commits from scratch.
+
+### 9.1 Environment
+
+| Tool | Path |
+|------|------|
+| JDK 21 | `C:\Program Files\Java\jdk-21.0.10` |
+| Maven 3.9.14 | `C:\Program Files\apache-maven-3.9.14` |
+
+Run tests:
+```bash
+JAVA_HOME="C:\Program Files\Java\jdk-21.0.10" \
+  "C:\Program Files\apache-maven-3.9.14\bin\mvn" test
+```
+
+Current result: **29 tests — 0 failures** (as of 2026-03-27).
+
+### 9.2 Completed Phases
+
+#### Phase 1 — Authentication foundation (UC-C01–C04) ✅
+Branch `feature/auth-core` → merged into `develop`.
+
+| What | Files |
+|------|-------|
+| Entities (TPT) | `User`, `Passenger`, `Driver`, `Admin`, `RefreshToken` |
+| Repositories | `UserRepository`, `RefreshTokenRepository` |
+| Security | `JwtUtil`, `JwtFilter`, `UserDetailsServiceImpl`, `SecurityConfig` |
+| Service | `AuthService` |
+| Controller | `AuthController` — `POST /auth/register`, `/login`, `/refresh`, `/logout` |
+| DTOs | `RegisterRequest`, `LoginRequest`, `RefreshTokenRequest`, `AuthResponse` |
+| Tests | `AuthServiceTest` (11 unit), `AuthControllerTest` (9 integration) |
+| Migration | `V1__init_users.sql` — tables `users`, `passengers`, `drivers`, `admins`, `refresh_tokens` |
+
+#### Phase 2 — User profile (UC-C05–C08) ✅
+Branch `feature/user-profile` → merged into `develop`.
+
+| What | Files |
+|------|-------|
+| Service | `UserService` |
+| Controller | `UserController` — `GET /users/me`, `PUT /users/me`, `PUT /users/me/password`, `GET /users/{id}` |
+| DTOs | `UserProfileResponse`, `PublicUserResponse`, `UpdateProfileRequest`, `ChangePasswordRequest` |
+| Tests | `UserServiceTest` (9 unit) |
+| Fix | `/auth/logout` moved to `permitAll` in `SecurityConfig` (access token may be expired at logout) |
+
+### 9.3 Next Phases (not yet started)
+
+Suggested order — adjust to project priorities:
+
+| Phase | Scope | Key UCs |
+|-------|-------|---------|
+| 3 | Car management | Driver adds/edits/deletes cars (R09) |
+| 4 | Trip management | Driver publishes/edits/cancels trips (R07, R08) |
+| 5 | Reservation | Passenger books/cancels (R01, R02, R06) |
+| 6 | Driver verification | Admin approves driver documents (R08, R11) |
+| 7 | Reviews | Post-trip review, one per reservation per direction (R04, R05) |
+| 8 | Admin dashboard | Stats via `v_platform_stats`, account suspension (R11) |
+| 9 | Frontend | React + Vite + TailwindCSS, PrivateRoute, Leaflet map |
+
+### 9.4 Active Branch
+
+```
+develop  ← current integration branch (all phases merged here)
+main     ← not yet updated (nothing promoted to main yet)
+```
+
+### 9.5 Flyway Migration Counter
+
+Last migration: **V1** (`V1__init_users.sql`).
+Next migration to create: **V2**.
