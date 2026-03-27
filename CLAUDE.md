@@ -354,7 +354,7 @@ JAVA_HOME="C:\Program Files\Java\jdk-21.0.10" \
   "C:\Program Files\apache-maven-3.9.14\bin\mvn" test
 ```
 
-Current result: **121 tests — 0 failures** (as of 2026-03-27, after Phase 7).
+Current result: **156 tests — 0 failures** (as of 2026-03-27, after Phase 8).
 
 ### 9.2 Completed Phases
 
@@ -464,15 +464,28 @@ Branch `feature/reviews` → merged into `develop`.
 | Security | `/reservations/*/review` POST → authenticated (both PASSENGER and DRIVER) |
 | Note | Direction inferred from caller's type; driver avg_rating recalculated on PASSENGER_TO_DRIVER review |
 
+#### Phase 8 — Admin dashboard (UC-A01–A15) ✅
+Branch `feature/admin-dashboard` → merged into `develop`.
+
+| What | Files |
+|------|-------|
+| Service | `AdminService` — getAllUsers, getUserById, changeUserRole (TPT native SQL), changeUserStatus (R11), softDeleteUser (R11), getAllTrips, adminCancelTrip (R06), getAllReservations, updateReview, deleteReview, getPlatformStats, getGlobalMapTrips, getDocuments, reviewDocument (R08), notifyDriver |
+| Controller | `AdminController` — 15 endpoints under `/admin/**`, all `@PreAuthorize("hasRole('ADMIN')")` |
+| DTOs | `AdminUserResponse`, `AdminUserRoleRequest`, `AdminUserStatusRequest`, `AdminDocumentReviewRequest`, `AdminReviewModerationRequest`, `PlatformStatsResponse` |
+| DTOs updated | `DocumentResponse` — added `driverId`, `driverFirstName`, `driverLastName` |
+| Repositories updated | `UserRepository` (+countByDtype native), `TripRepository` (+countByStatus, +existsByDriver_Id), `ReservationRepository` (+countByStatus, +existsByPassenger_Id), `DriverDocumentRepository` (+findByStatus paginated, +countByStatus) |
+| Tests | `AdminControllerTest` (35 integration) |
+| Migration | `V7__create_platform_stats_view.sql` — view `v_platform_stats` |
+| Security | `/admin/**` → `ROLE_ADMIN` added to `SecurityConfig` |
+| Note | Role change blocked if user has existing data (passengers with reservations, drivers with trips). Stats use JPQL/native count queries (H2 + PostgreSQL compatible). |
+
 ### 9.3 Next Phases (not yet started)
 
 Suggested order — adjust to project priorities:
 
 | Phase | Scope | Key UCs |
 |-------|-------|---------|
-| 8 | Driver verification | Admin approves driver documents (R08, R11) |
-| 9 | Admin dashboard | Stats via `v_platform_stats`, account suspension (R11) |
-| 10 | Frontend | React + Vite + TailwindCSS, PrivateRoute, Leaflet map |
+| 9 | Frontend | React + Vite + TailwindCSS, PrivateRoute, Leaflet map |
 
 ### 9.4 Active Branch
 
@@ -483,5 +496,5 @@ main     ← not yet updated (nothing promoted to main yet)
 
 ### 9.5 Flyway Migration Counter
 
-Last migration: **V6** (`V6__init_reviews.sql`).
-Next migration to create: **V7**.
+Last migration: **V7** (`V7__create_platform_stats_view.sql`).
+Next migration to create: **V8**.

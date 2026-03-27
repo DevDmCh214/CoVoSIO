@@ -32,4 +32,10 @@ public interface ReservationRepository extends JpaRepository<Reservation, UUID> 
 
     /** UC-D08: all reservations for a trip, newest first. */
     Page<Reservation> findByTrip_IdOrderByCreatedAtDesc(UUID tripId, Pageable pageable);
+
+    /** Admin stats: count reservations by status (UC-A11). */
+    long countByStatus(ReservationStatus status);
+
+    /** Role-change guard: checks whether a passenger has any reservations. */
+    boolean existsByPassenger_Id(UUID passengerId);
 }

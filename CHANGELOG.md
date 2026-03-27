@@ -1,5 +1,25 @@
 # CHANGELOG
 
+## [0.8.0] - 2026-03-27
+### Added
+- UC-A01 : GET /admin/users — paginated list of all users with role-specific fields
+- UC-A02 : GET /admin/users/:id — full user details
+- UC-A03–A05 : PUT /admin/users/:id/role — role change (PASSENGER/DRIVER/ADMIN) via TPT native SQL
+- UC-A05 : PUT /admin/users/:id/status — suspend/activate + R11 (refresh token revocation)
+- UC-A06 : DELETE /admin/users/:id — soft delete (isActive = false + R11)
+- UC-A07 : GET /admin/trips — all trips regardless of status
+- UC-A08 : DELETE /admin/trips/:id — admin trip cancellation (R06 cascade)
+- UC-A09 : GET /admin/reservations — all reservations
+- UC-A10 : PUT/DELETE /admin/reviews/:id — review moderation
+- UC-A11 : GET /admin/stats — platform statistics (counts per entity/status)
+- UC-A12 : GET /admin/trips/map — global map (all trips, all statuses)
+- UC-A13 : GET /admin/documents?status=PENDING — driver documents by status
+- UC-A14 : PUT /admin/documents/:id/review — approve/reject document; sets licenseVerified/registrationVerified (R08)
+- UC-A15 : POST /admin/documents/:id/notify — re-notify driver about pending document
+- AdminService, AdminController, 6 admin DTOs (AdminUserResponse, AdminUserRoleRequest, AdminUserStatusRequest, AdminDocumentReviewRequest, AdminReviewModerationRequest, PlatformStatsResponse)
+- Flyway migration V7 — v_platform_stats view for admin dashboard
+- 35 AdminControllerTest integration tests — 156 total, 0 failures
+
 ## [0.7.0] - 2026-03-27
 ### Added
 - UC-P06 : passenger reviews the driver (POST /reservations/:id/review) — R04, R05 enforced

@@ -64,4 +64,10 @@ public interface TripRepository extends JpaRepository<Trip, UUID> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT t FROM Trip t WHERE t.id = :id")
     Optional<Trip> findByIdForUpdate(@Param("id") UUID id);
+
+    /** Admin stats: count trips by status (UC-A11). */
+    long countByStatus(TripStatus status);
+
+    /** Role-change guard: checks whether a driver has any trips. */
+    boolean existsByDriver_Id(UUID driverId);
 }

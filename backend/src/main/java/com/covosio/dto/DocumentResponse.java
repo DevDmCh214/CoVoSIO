@@ -25,6 +25,10 @@ public class DocumentResponse {
     private String rejectionReason;
     /** UUID of the linked car — null for LICENSE documents. */
     private UUID carId;
+    /** Driver who uploaded the document — populated in admin views. */
+    private UUID driverId;
+    private String driverFirstName;
+    private String driverLastName;
     private LocalDateTime uploadedAt;
     private LocalDateTime reviewedAt;
 }
