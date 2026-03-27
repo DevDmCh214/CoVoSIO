@@ -191,7 +191,6 @@ spring.log
 *.temp
 *.swp
 *.swo
-CLAUDE.md
 CONTEXT.md
 
 # Archives
