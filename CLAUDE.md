@@ -353,7 +353,7 @@ JAVA_HOME="C:\Program Files\Java\jdk-21.0.10" \
   "C:\Program Files\apache-maven-3.9.14\bin\mvn" test
 ```
 
-Current result: **29 tests — 0 failures** (as of 2026-03-27).
+Current result: **40 tests — 0 failures** (as of 2026-03-27).
 
 ### 9.2 Completed Phases
 
@@ -382,13 +382,27 @@ Branch `feature/user-profile` → merged into `develop`.
 | Tests | `UserServiceTest` (9 unit) |
 | Fix | `/auth/logout` moved to `permitAll` in `SecurityConfig` (access token may be expired at logout) |
 
+#### Phase 3 — Car management (UC-D01, UC-D01b) ✅
+Branch `feature/cars` → merged into `develop`.
+
+| What | Files |
+|------|-------|
+| Entity | `Car` |
+| Repository | `CarRepository` — `findByDriver_IdAndIsActiveTrue`, `countFutureAvailableTripsForCar` (R09 native query) |
+| Service | `CarService` — `addCar`, `deleteCar` (R09), `getMyCars` |
+| Controller | `CarController` — `POST /cars`, `DELETE /cars/{id}`, `GET /cars/me` |
+| DTOs | `CarRequest`, `CarResponse` |
+| Tests | `CarServiceTest` (11 unit) |
+| Migration | `V2__init_cars.sql` — table `cars` |
+| Security | `/cars`, `/cars/**` → `ROLE_DRIVER` added to `SecurityConfig` |
+| Note | R09 enforced via native query; soft-delete pattern (`is_active = false`) |
+
 ### 9.3 Next Phases (not yet started)
 
 Suggested order — adjust to project priorities:
 
 | Phase | Scope | Key UCs |
 |-------|-------|---------|
-| 3 | Car management | Driver adds/edits/deletes cars (R09) |
 | 4 | Trip management | Driver publishes/edits/cancels trips (R07, R08) |
 | 5 | Reservation | Passenger books/cancels (R01, R02, R06) |
 | 6 | Driver verification | Admin approves driver documents (R08, R11) |
@@ -405,5 +419,5 @@ main     ← not yet updated (nothing promoted to main yet)
 
 ### 9.5 Flyway Migration Counter
 
-Last migration: **V1** (`V1__init_users.sql`).
-Next migration to create: **V2**.
+Last migration: **V2** (`V2__init_cars.sql`).
+Next migration to create: **V3**.
