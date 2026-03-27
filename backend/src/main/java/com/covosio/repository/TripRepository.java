@@ -4,11 +4,14 @@ import com.covosio.entity.Trip;
 import com.covosio.entity.TripStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface TripRepository extends JpaRepository<Trip, UUID> {
@@ -53,4 +56,12 @@ public interface TripRepository extends JpaRepository<Trip, UUID> {
 
     /** All of a driver's trips regardless of status — driver map view (UC-D10). */
     Page<Trip> findByDriver_Id(UUID driverId, Pageable pageable);
+
+    /**
+     * Loads a trip with a pessimistic write lock for R02 (atomic seat check + decrement).
+     * Must be called inside a @Transactional method.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT t FROM Trip t WHERE t.id = :id")
+    Optional<Trip> findByIdForUpdate(@Param("id") UUID id);
 }
