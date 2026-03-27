@@ -1,22 +1,23 @@
 package com.covosio.entity;
 
 import jakarta.persistence.*;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
- * Reservation entity stub — Phase 5.
- * Maps only the fields required for R06 (cascade cancel) and R07 (confirm check).
- * Full entity (passenger, seatsBooked, createdAt) is completed in Phase 6.
+ * A passenger's seat reservation on a specific trip.
+ * seatsBooked is decremented from Trip.seatsAvailable on creation
+ * and restored on cancellation.
  */
 @Entity
 @Table(name = "reservations")
 @Getter
 @Setter
 @NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class Reservation {
 
     @Id
@@ -28,7 +29,25 @@ public class Reservation {
     @JoinColumn(name = "trip_id", nullable = false)
     private Trip trip;
 
-    /** PENDING, CONFIRMED, or CANCELLED. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "passenger_id", nullable = false)
+    private Passenger passenger;
+
+    @Column(name = "seats_booked", nullable = false)
+    private Integer seatsBooked;
+
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
-    private String status;
+    @Builder.Default
+    private ReservationStatus status = ReservationStatus.PENDING;
+
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private LocalDateTime createdAt;
+
+    @PrePersist
+    protected void onCreate() {
+        if (createdAt == null) {
+            createdAt = LocalDateTime.now();
+        }
+    }
 }

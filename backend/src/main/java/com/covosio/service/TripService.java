@@ -29,8 +29,6 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class TripService {
 
-    private static final String STATUS_CONFIRMED = "CONFIRMED";
-
     private final TripRepository        tripRepository;
     private final ReservationRepository reservationRepository;
     private final UserRepository        userRepository;
@@ -144,7 +142,7 @@ public class TripService {
 
         // R07 — if CONFIRMED reservations exist, only the meeting point (origin) is editable
         boolean hasConfirmedReservations =
-                reservationRepository.countByTrip_IdAndStatus(id, STATUS_CONFIRMED) > 0;
+                reservationRepository.countByTrip_IdAndStatus(id, ReservationStatus.CONFIRMED) > 0;
 
         if (hasConfirmedReservations) {
             trip.setOriginLabel(request.getOriginLabel());
@@ -197,7 +195,7 @@ public class TripService {
         }
 
         // R06 — cascade cancel all reservations
-        reservationRepository.cancelAllByTripId(id);
+        reservationRepository.cancelAllByTripId(id, ReservationStatus.CANCELLED);
 
         trip.setStatus(TripStatus.CANCELLED);
         tripRepository.save(trip);

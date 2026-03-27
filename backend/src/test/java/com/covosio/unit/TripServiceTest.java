@@ -182,7 +182,7 @@ class TripServiceTest {
 
         when(userRepository.findByEmail("driver@test.com")).thenReturn(Optional.of(driver));
         when(tripRepository.findById(trip.getId())).thenReturn(Optional.of(trip));
-        when(reservationRepository.countByTrip_IdAndStatus(trip.getId(), "CONFIRMED")).thenReturn(0L);
+        when(reservationRepository.countByTrip_IdAndStatus(trip.getId(), ReservationStatus.CONFIRMED)).thenReturn(0L);
         when(carRepository.findById(car.getId())).thenReturn(Optional.of(car));
         when(tripRepository.save(any(Trip.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -204,7 +204,7 @@ class TripServiceTest {
 
         when(userRepository.findByEmail("driver@test.com")).thenReturn(Optional.of(driver));
         when(tripRepository.findById(trip.getId())).thenReturn(Optional.of(trip));
-        when(reservationRepository.countByTrip_IdAndStatus(trip.getId(), "CONFIRMED")).thenReturn(2L);
+        when(reservationRepository.countByTrip_IdAndStatus(trip.getId(), ReservationStatus.CONFIRMED)).thenReturn(2L);
         when(tripRepository.save(any(Trip.class))).thenAnswer(inv -> inv.getArgument(0));
 
         TripRequest updateRequest = buildRequest(car.getId());
@@ -253,13 +253,13 @@ class TripServiceTest {
 
         when(userRepository.findByEmail("driver@test.com")).thenReturn(Optional.of(driver));
         when(tripRepository.findById(trip.getId())).thenReturn(Optional.of(trip));
-        when(reservationRepository.cancelAllByTripId(trip.getId())).thenReturn(0);
+        when(reservationRepository.cancelAllByTripId(trip.getId(), ReservationStatus.CANCELLED)).thenReturn(0);
         when(tripRepository.save(any(Trip.class))).thenAnswer(inv -> inv.getArgument(0));
 
         tripService.cancelTrip(trip.getId(), "driver@test.com");
 
         assertThat(trip.getStatus()).isEqualTo(TripStatus.CANCELLED);
-        verify(reservationRepository).cancelAllByTripId(trip.getId());
+        verify(reservationRepository).cancelAllByTripId(trip.getId(), ReservationStatus.CANCELLED);
         verify(tripRepository).save(trip);
     }
 
