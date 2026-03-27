@@ -38,10 +38,14 @@ public class SecurityConfig {
                 .requestMatchers(
                     "/auth/register",
                     "/auth/login",
-                    "/auth/refresh"
+                    "/auth/refresh",
+                    "/auth/logout"
                 ).permitAll()
                 // OpenAPI/Swagger docs (dev convenience)
                 .requestMatchers("/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
+                // User profile endpoints — any authenticated user (UC-C05 to UC-C08)
+                .requestMatchers("/users/me", "/users/me/password").authenticated()
+                .requestMatchers("/users/{id}").authenticated()
                 // All other endpoints require authentication
                 .anyRequest().authenticated()
             )
