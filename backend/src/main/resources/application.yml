@@ -25,6 +25,9 @@ jwt:
   expiration-ms: ${JWT_EXPIRATION_MS:900000}
   refresh-expiration-ms: ${JWT_REFRESH_EXPIRATION_MS:604800000}
 
+app:
+  upload-dir: ${UPLOAD_DIR:./uploads}
+
 springdoc:
   api-docs:
     path: /api-docs

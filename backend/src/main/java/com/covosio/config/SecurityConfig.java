@@ -48,6 +48,9 @@ public class SecurityConfig {
                 .requestMatchers("/users/{id}").authenticated()
                 // Car endpoints — drivers only (UC-D01, UC-D01b)
                 .requestMatchers("/cars", "/cars/**").hasRole("DRIVER")
+                // Document endpoints — drivers only (UC-D11, UC-D12)
+                .requestMatchers("/documents").hasRole("DRIVER")
+                .requestMatchers("/users/me/documents", "/users/me/documents/**").hasRole("DRIVER")
                 // All other endpoints require authentication
                 .anyRequest().authenticated()
             )
