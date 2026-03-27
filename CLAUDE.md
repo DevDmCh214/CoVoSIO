@@ -354,7 +354,7 @@ JAVA_HOME="C:\Program Files\Java\jdk-21.0.10" \
   "C:\Program Files\apache-maven-3.9.14\bin\mvn" test
 ```
 
-Current result: **84 tests — 0 failures** (as of 2026-03-27).
+Current result: **107 tests — 0 failures** (as of 2026-03-27, after Phase 6).
 
 ### 9.2 Completed Phases
 
@@ -431,18 +431,33 @@ Branch `feature/trips` → merged into `develop`.
 | Security | DRIVER-only write endpoints + read-only for all authenticated users; `HttpMethod`-specific rules in `SecurityConfig` |
 | Note | R07: branch logic in place; R06: JPQL bulk UPDATE; Reservation stub avoids Hibernate schema validation failure when V5 migration is active |
 
+#### Phase 6 — Reservations (UC-P03, UC-P04, UC-P05, UC-D08) ✅
+Branch `feature/reservations` → merged into `develop`.
+
+| What | Files |
+|------|-------|
+| Enum | `ReservationStatus` (PENDING, CONFIRMED, CANCELLED) |
+| Entity | `Reservation` — full entity (passenger, seatsBooked, status enum, createdAt) |
+| Repository | `ReservationRepository` — countByTrip_IdAndStatus (enum), cancelAllByTripId (enum param), findByPassenger, findByTrip |
+| Repository | `TripRepository` — added `findByIdForUpdate` (PESSIMISTIC_WRITE lock for R02) |
+| Service | `ReservationService` — createReservation (R01, R02), cancelReservation (R03), getMyReservations (UC-P05), getTripReservations (UC-D08) |
+| Controller | `ReservationController` — POST /reservations, DELETE /reservations/{id}, GET /reservations/me, GET /trips/{id}/reservations |
+| DTOs | `ReservationRequest`, `ReservationResponse` |
+| Tests | `ReservationServiceTest` (14 unit), `ReservationControllerTest` (9 integration) |
+| Migration | V5 already included the full reservations table — no new migration needed |
+| Security | PASSENGER-only for /reservations**; DRIVER-only for /trips/*/reservations in `SecurityConfig` |
+| Note | R01: passenger.id vs trip.driver.id; R02: atomic under pessimistic write lock; R03: 2h window before departure |
+
 ### 9.3 Next Phases (not yet started)
 
 Suggested order — adjust to project priorities:
 
 | Phase | Scope | Key UCs |
 |-------|-------|---------|
-| 6 | Reservations | Passenger books/cancels (R01, R02, R03, R06) |
-| 5 | Reservation | Passenger books/cancels (R01, R02, R06) |
-| 6 | Driver verification | Admin approves driver documents (R08, R11) |
-| 7 | Reviews | Post-trip review, one per reservation per direction (R04, R05) |
-| 8 | Admin dashboard | Stats via `v_platform_stats`, account suspension (R11) |
-| 9 | Frontend | React + Vite + TailwindCSS, PrivateRoute, Leaflet map |
+| 7 | Driver verification | Admin approves driver documents (R08, R11) |
+| 8 | Reviews | Post-trip review, one per reservation per direction (R04, R05) |
+| 9 | Admin dashboard | Stats via `v_platform_stats`, account suspension (R11) |
+| 10 | Frontend | React + Vite + TailwindCSS, PrivateRoute, Leaflet map |
 
 ### 9.4 Active Branch
 
