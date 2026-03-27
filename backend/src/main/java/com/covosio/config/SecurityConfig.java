@@ -3,6 +3,7 @@ package com.covosio.config;
 import com.covosio.security.JwtFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
+import org.springframework.http.HttpMethod;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.AuthenticationProvider;
@@ -51,6 +52,12 @@ public class SecurityConfig {
                 // Document endpoints — drivers only (UC-D11, UC-D12)
                 .requestMatchers("/documents").hasRole("DRIVER")
                 .requestMatchers("/users/me/documents", "/users/me/documents/**").hasRole("DRIVER")
+                // Trip endpoints — read access for all authenticated; write access for drivers only
+                .requestMatchers(HttpMethod.POST,   "/trips").hasRole("DRIVER")
+                .requestMatchers(HttpMethod.PUT,    "/trips/**").hasRole("DRIVER")
+                .requestMatchers(HttpMethod.DELETE, "/trips/**").hasRole("DRIVER")
+                .requestMatchers(HttpMethod.GET,    "/trips/me", "/trips/map/me").hasRole("DRIVER")
+                .requestMatchers(HttpMethod.GET,    "/trips", "/trips/**").authenticated()
                 // All other endpoints require authentication
                 .anyRequest().authenticated()
             )
