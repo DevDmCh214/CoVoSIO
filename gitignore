@@ -192,6 +192,7 @@ spring.log
 *.swp
 *.swo
 CLAUDE.md
+CONTEXT.md
 
 # Archives
 *.zip
