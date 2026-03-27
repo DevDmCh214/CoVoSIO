@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## [0.7.0] - 2026-03-27
+### Added
+- UC-P06 : passenger reviews the driver (POST /reservations/:id/review) — R04, R05 enforced
+- UC-D09 : driver reviews the passenger (POST /reservations/:id/review) — R04, R05 enforced
+- ReviewDirection enum (PASSENGER_TO_DRIVER, DRIVER_TO_PASSENGER)
+- Driver avg_rating recalculated after each PASSENGER_TO_DRIVER review
+- Flyway migration V6 — reviews table with UNIQUE(reservation_id, direction)
+
 ## [0.6.0] - 2026-03-27
 ### Added
 - UC-P03 : passenger books a trip (POST /reservations) — R01, R02 enforced
