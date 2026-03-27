@@ -52,7 +52,12 @@ public class SecurityConfig {
                 // Document endpoints — drivers only (UC-D11, UC-D12)
                 .requestMatchers("/documents").hasRole("DRIVER")
                 .requestMatchers("/users/me/documents", "/users/me/documents/**").hasRole("DRIVER")
+                // Reservation endpoints — passengers only (UC-P03, UC-P04, UC-P05)
+                .requestMatchers(HttpMethod.POST,   "/reservations").hasRole("PASSENGER")
+                .requestMatchers(HttpMethod.DELETE, "/reservations/**").hasRole("PASSENGER")
+                .requestMatchers(HttpMethod.GET,    "/reservations/me").hasRole("PASSENGER")
                 // Trip endpoints — read access for all authenticated; write access for drivers only
+                .requestMatchers(HttpMethod.GET,    "/trips/*/reservations").hasRole("DRIVER")
                 .requestMatchers(HttpMethod.POST,   "/trips").hasRole("DRIVER")
                 .requestMatchers(HttpMethod.PUT,    "/trips/**").hasRole("DRIVER")
                 .requestMatchers(HttpMethod.DELETE, "/trips/**").hasRole("DRIVER")
