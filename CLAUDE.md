@@ -354,7 +354,7 @@ JAVA_HOME="C:\Program Files\Java\jdk-21.0.10" \
   "C:\Program Files\apache-maven-3.9.14\bin\mvn" test
 ```
 
-Current result: **107 tests — 0 failures** (as of 2026-03-27, after Phase 6).
+Current result: **121 tests — 0 failures** (as of 2026-03-27, after Phase 7).
 
 ### 9.2 Completed Phases
 
@@ -448,14 +448,29 @@ Branch `feature/reservations` → merged into `develop`.
 | Security | PASSENGER-only for /reservations**; DRIVER-only for /trips/*/reservations in `SecurityConfig` |
 | Note | R01: passenger.id vs trip.driver.id; R02: atomic under pessimistic write lock; R03: 2h window before departure |
 
+#### Phase 7 — Reviews (UC-P06, UC-D09) ✅
+Branch `feature/reviews` → merged into `develop`.
+
+| What | Files |
+|------|-------|
+| Enum | `ReviewDirection` (PASSENGER_TO_DRIVER, DRIVER_TO_PASSENGER) |
+| Entity | `Review` — reservation FK, author, target, direction enum, rating 1–5, comment, createdAt |
+| Repository | `ReviewRepository` — existsByReservation_IdAndDirection (R05), findAverageRatingByTargetId |
+| Service | `ReviewService` — createReview (R04, R05, avg_rating recalc) |
+| Controller | `ReviewController` — POST /reservations/{id}/review |
+| DTOs | `ReviewRequest`, `ReviewResponse` |
+| Tests | `ReviewServiceTest` (7 unit), `ReviewControllerTest` (6 integration) |
+| Migration | `V6__init_reviews.sql` — reviews table with UNIQUE(reservation_id, direction) |
+| Security | `/reservations/*/review` POST → authenticated (both PASSENGER and DRIVER) |
+| Note | Direction inferred from caller's type; driver avg_rating recalculated on PASSENGER_TO_DRIVER review |
+
 ### 9.3 Next Phases (not yet started)
 
 Suggested order — adjust to project priorities:
 
 | Phase | Scope | Key UCs |
 |-------|-------|---------|
-| 7 | Driver verification | Admin approves driver documents (R08, R11) |
-| 8 | Reviews | Post-trip review, one per reservation per direction (R04, R05) |
+| 8 | Driver verification | Admin approves driver documents (R08, R11) |
 | 9 | Admin dashboard | Stats via `v_platform_stats`, account suspension (R11) |
 | 10 | Frontend | React + Vite + TailwindCSS, PrivateRoute, Leaflet map |
 
@@ -468,5 +483,5 @@ main     ← not yet updated (nothing promoted to main yet)
 
 ### 9.5 Flyway Migration Counter
 
-Last migration: **V5** (`V5__init_reservations.sql`).
-Next migration to create: **V6**.
+Last migration: **V6** (`V6__init_reviews.sql`).
+Next migration to create: **V7**.
