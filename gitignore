@@ -191,7 +191,7 @@ spring.log
 *.temp
 *.swp
 *.swo
-claude.md
+CLAUDE.md
 
 # Archives
 *.zip
