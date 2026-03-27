@@ -1,0 +1,56 @@
+package com.covosio.repository;
+
+import com.covosio.entity.Trip;
+import com.covosio.entity.TripStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
+import java.time.LocalDateTime;
+import java.util.UUID;
+
+public interface TripRepository extends JpaRepository<Trip, UUID> {
+
+    /**
+     * Full-text search for available trips (UC-P01).
+     * All filters are optional — null values are ignored.
+     * Uses case-insensitive LIKE on city labels and a day-range for date filtering.
+     */
+    @Query(value = """
+            SELECT t FROM Trip t
+            WHERE t.status = :status
+              AND t.seatsAvailable > 0
+              AND (:origin      IS NULL OR LOWER(t.originLabel)      LIKE LOWER(CONCAT('%', :origin,      '%')))
+              AND (:destination IS NULL OR LOWER(t.destinationLabel) LIKE LOWER(CONCAT('%', :destination, '%')))
+              AND (:dateStart   IS NULL OR t.departureAt >= :dateStart)
+              AND (:dateEnd     IS NULL OR t.departureAt <  :dateEnd)
+            """,
+           countQuery = """
+            SELECT COUNT(t) FROM Trip t
+            WHERE t.status = :status
+              AND t.seatsAvailable > 0
+              AND (:origin      IS NULL OR LOWER(t.originLabel)      LIKE LOWER(CONCAT('%', :origin,      '%')))
+              AND (:destination IS NULL OR LOWER(t.destinationLabel) LIKE LOWER(CONCAT('%', :destination, '%')))
+              AND (:dateStart   IS NULL OR t.departureAt >= :dateStart)
+              AND (:dateEnd     IS NULL OR t.departureAt <  :dateEnd)
+            """)
+    Page<Trip> search(
+            @Param("status")      TripStatus    status,
+            @Param("origin")      String        origin,
+            @Param("destination") String        destination,
+            @Param("dateStart")   LocalDateTime dateStart,
+            @Param("dateEnd")     LocalDateTime dateEnd,
+            Pageable pageable
+    );
+
+    /** Driver's own trips, newest departure first (UC-D07). */
+    Page<Trip> findByDriver_IdOrderByDepartureAtDesc(UUID driverId, Pageable pageable);
+
+    /** AVAILABLE trips with at least one free seat — passenger map view (UC-P07). */
+    Page<Trip> findByStatusAndSeatsAvailableGreaterThan(TripStatus status, int minSeats, Pageable pageable);
+
+    /** All of a driver's trips regardless of status — driver map view (UC-D10). */
+    Page<Trip> findByDriver_Id(UUID driverId, Pageable pageable);
+}

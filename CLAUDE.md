@@ -330,6 +330,7 @@ Maintained at project root. Updated with each feature or fix:
 - [ ] DTOs updated if entity changed
 - [ ] Javadoc present on service public methods
 - [ ] No secrets in committed files
+- [ ] No writing phase number in commit message
 - [ ] `CHANGELOG.md` updated
 - [ ] An existing endpoint tested manually (non-regression)
 
@@ -353,7 +354,7 @@ JAVA_HOME="C:\Program Files\Java\jdk-21.0.10" \
   "C:\Program Files\apache-maven-3.9.14\bin\mvn" test
 ```
 
-Current result: **56 tests — 0 failures** (as of 2026-03-27).
+Current result: **84 tests — 0 failures** (as of 2026-03-27).
 
 ### 9.2 Completed Phases
 
@@ -414,13 +415,29 @@ Branch `feature/documents` → merged into `develop`.
 | Config | `app.upload-dir` added to `application.yml` and `application-test.yml` |
 | Note | Magic signature detection (JPEG/PNG/PDF). Files stored at `{uploadDir}/documents/{driverId}/{uuid}.ext`. Admin review (Phase 6). |
 
+#### Phase 5 — Trip management (UC-D04 to UC-D07, UC-P01, UC-P02, UC-P07, UC-D10) ✅
+Branch `feature/trips` → merged into `develop`.
+
+| What | Files |
+|------|-------|
+| Enum | `TripStatus` (AVAILABLE, CANCELLED, COMPLETED) |
+| Entities | `Trip`, `Reservation` (stub — id, trip, status; full entity Phase 6) |
+| Repositories | `TripRepository` — search (JPQL, optional filters), findByDriver, findByStatus; `ReservationRepository` stub — R06 bulk cancel, R07 count |
+| Service | `TripService` — createTrip (R08), searchTrips (UC-P01), getTripById (UC-P02), updateTrip (R07), cancelTrip (R06), getMyTrips (UC-D07), getMapTrips (UC-P07), getMyMapTrips (UC-D10) |
+| Controller | `TripController` — POST /trips, GET /trips, GET /trips/{id}, PUT /trips/{id}, DELETE /trips/{id}, GET /trips/me, GET /trips/map, GET /trips/map/me |
+| DTOs | `TripRequest`, `TripResponse`, `TripMapResponse` |
+| Tests | `TripServiceTest` (18 unit), `TripControllerTest` (10 integration) |
+| Migrations | `V4__init_trips.sql` — trips table; `V5__init_reservations.sql` — reservations table (used by Phase 6 entity) |
+| Security | DRIVER-only write endpoints + read-only for all authenticated users; `HttpMethod`-specific rules in `SecurityConfig` |
+| Note | R07: branch logic in place; R06: JPQL bulk UPDATE; Reservation stub avoids Hibernate schema validation failure when V5 migration is active |
+
 ### 9.3 Next Phases (not yet started)
 
 Suggested order — adjust to project priorities:
 
 | Phase | Scope | Key UCs |
 |-------|-------|---------|
-| 5 | Trip management | Driver publishes/edits/cancels trips (R07, R08) |
+| 6 | Reservations | Passenger books/cancels (R01, R02, R03, R06) |
 | 5 | Reservation | Passenger books/cancels (R01, R02, R06) |
 | 6 | Driver verification | Admin approves driver documents (R08, R11) |
 | 7 | Reviews | Post-trip review, one per reservation per direction (R04, R05) |
@@ -436,5 +453,5 @@ main     ← not yet updated (nothing promoted to main yet)
 
 ### 9.5 Flyway Migration Counter
 
-Last migration: **V3** (`V3__init_documents.sql`).
-Next migration to create: **V4**.
+Last migration: **V5** (`V5__init_reservations.sql`).
+Next migration to create: **V6**.
