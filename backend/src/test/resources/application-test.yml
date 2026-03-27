@@ -18,3 +18,6 @@ jwt:
   secret: dGVzdC1zZWNyZXQta2V5LWZvci11bml0LXRlc3RzLW11c3QtYmUtbG9uZy1lbm91Z2g=
   expiration-ms: 900000
   refresh-expiration-ms: 604800000
+
+app:
+  upload-dir: /tmp/covosio-test-uploads

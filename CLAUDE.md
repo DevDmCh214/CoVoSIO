@@ -353,7 +353,7 @@ JAVA_HOME="C:\Program Files\Java\jdk-21.0.10" \
   "C:\Program Files\apache-maven-3.9.14\bin\mvn" test
 ```
 
-Current result: **40 tests — 0 failures** (as of 2026-03-27).
+Current result: **56 tests — 0 failures** (as of 2026-03-27).
 
 ### 9.2 Completed Phases
 
@@ -397,13 +397,30 @@ Branch `feature/cars` → merged into `develop`.
 | Security | `/cars`, `/cars/**` → `ROLE_DRIVER` added to `SecurityConfig` |
 | Note | R09 enforced via native query; soft-delete pattern (`is_active = false`) |
 
+#### Phase 4 — Driver documents (UC-D11, UC-D12) ✅
+Branch `feature/documents` → merged into `develop`.
+
+| What | Files |
+|------|-------|
+| Enums | `DocumentType` (LICENSE, CAR_REGISTRATION), `DocumentStatus` (PENDING, APPROVED, REJECTED) |
+| Entity | `DriverDocument` |
+| Repository | `DriverDocumentRepository` — `findByDriver_IdOrderByUploadedAtDesc` |
+| Service | `DocumentService` — `upload` (UC-D11), `getMyDocuments`, `getFile` (UC-D12) |
+| Controller | `DocumentController` — `POST /documents`, `GET /users/me/documents`, `GET /users/me/documents/{id}/file` |
+| DTOs | `DocumentResponse`, `DocumentFileResult` (record) |
+| Tests | `DocumentServiceTest` (16 unit) |
+| Migration | `V3__init_documents.sql` — table `driver_documents` |
+| Security | `/documents`, `/users/me/documents/**` → `ROLE_DRIVER` in `SecurityConfig` |
+| Config | `app.upload-dir` added to `application.yml` and `application-test.yml` |
+| Note | Magic signature detection (JPEG/PNG/PDF). Files stored at `{uploadDir}/documents/{driverId}/{uuid}.ext`. Admin review (Phase 6). |
+
 ### 9.3 Next Phases (not yet started)
 
 Suggested order — adjust to project priorities:
 
 | Phase | Scope | Key UCs |
 |-------|-------|---------|
-| 4 | Trip management | Driver publishes/edits/cancels trips (R07, R08) |
+| 5 | Trip management | Driver publishes/edits/cancels trips (R07, R08) |
 | 5 | Reservation | Passenger books/cancels (R01, R02, R06) |
 | 6 | Driver verification | Admin approves driver documents (R08, R11) |
 | 7 | Reviews | Post-trip review, one per reservation per direction (R04, R05) |
@@ -419,5 +436,5 @@ main     ← not yet updated (nothing promoted to main yet)
 
 ### 9.5 Flyway Migration Counter
 
-Last migration: **V2** (`V2__init_cars.sql`).
-Next migration to create: **V3**.
+Last migration: **V3** (`V3__init_documents.sql`).
+Next migration to create: **V4**.
