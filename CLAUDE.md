@@ -479,6 +479,18 @@ Branch `feature/admin-dashboard` → merged into `develop`.
 | Security | `/admin/**` → `ROLE_ADMIN` added to `SecurityConfig` |
 | Note | Role change blocked if user has existing data (passengers with reservations, drivers with trips). Stats use JPQL/native count queries (H2 + PostgreSQL compatible). |
 
+### 9.3 Docker Setup ✅
+
+`docker-compose.yml` at project root. Three services: `db` (postgres:16), `backend` (built from `backend/Dockerfile`), volumes for data + uploads.
+
+```bash
+docker compose up -d --build   # first start / after code changes
+docker compose down -v         # wipe DB + volumes (fresh state)
+docker compose logs backend    # check Flyway + app logs
+```
+
+Env file: `.env` at project root (not committed). Copy from `.env.example`.
+
 ### 9.3 Next Phases (not yet started)
 
 Suggested order — adjust to project priorities:
@@ -496,5 +508,34 @@ main     ← not yet updated (nothing promoted to main yet)
 
 ### 9.5 Flyway Migration Counter
 
-Last migration: **V7** (`V7__create_platform_stats_view.sql`).
-Next migration to create: **V8**.
+Last migration: **V10** (`V10__fix_seed_dtype_and_passwords.sql`).
+Next migration to create: **V11**.
+
+Seed migrations V8–V10 insert mock data for all entity types and endpoint testing.
+See section 9.6 for test accounts.
+
+### 9.6 Mock Data — Test Accounts
+
+All passwords: `password`
+
+| Email | Role | Notes |
+|-------|------|-------|
+| `admin@covosio.fr` | ADMIN | Full admin access |
+| `driver1@covosio.fr` | DRIVER | Verified license + car (Peugeot 308 `AB-123-CD`) |
+| `driver2@covosio.fr` | DRIVER | Unverified — cannot publish trips |
+| `passenger1@covosio.fr` | PASSENGER | 2 reservations, 1 review submitted |
+| `passenger2@covosio.fr` | PASSENGER | 1 pending reservation |
+| `suspended@covosio.fr` | PASSENGER | `is_active=false` — login blocked |
+
+Fixed UUID prefix: `00000000-0000-0000-0000-0000000000XX`
+- Users: 01–06 | Cars: 10–12 | Trips: 20–23 | Reservations: 30–33 | Reviews: 40–41 | Documents: 50–53
+
+### 9.7 PostgreSQL Compatibility Fixes
+
+Two bugs found when running against real PostgreSQL (H2 tests were passing):
+
+1. **`reviews.rating` type mismatch** — V6 used `SMALLINT`, JPA entity maps `Integer` to `INTEGER`. Fixed in V9.
+2. **`TripRepository.search` null parameters** — Hibernate 6 sends null JPQL params as `bytea` on PostgreSQL. Fixed by:
+   - Using `CAST(:x AS string)` for optional string filters
+   - Passing sentinel dates `LocalDateTime.of(1970,1,1,0,0)` / `LocalDateTime.of(2100,1,1,0,0)` instead of null in `TripService`
+3. **`AuthService` suspended user login** — `LockedException` from `authenticationManager.authenticate()` was uncaught → 500. Fixed by catching `LockedException` alongside `BadCredentialsException`.

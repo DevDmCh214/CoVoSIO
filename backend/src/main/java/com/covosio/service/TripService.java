@@ -95,8 +95,8 @@ public class TripService {
      */
     @Transactional(readOnly = true)
     public Page<TripResponse> searchTrips(String origin, String destination, LocalDate date, Pageable pageable) {
-        LocalDateTime dateStart = date != null ? date.atStartOfDay()              : null;
-        LocalDateTime dateEnd   = date != null ? date.plusDays(1).atStartOfDay()  : null;
+        LocalDateTime dateStart = date != null ? date.atStartOfDay()             : LocalDateTime.of(1970, 1, 1, 0, 0);
+        LocalDateTime dateEnd   = date != null ? date.plusDays(1).atStartOfDay() : LocalDateTime.of(2100, 1, 1, 0, 0);
         return tripRepository.search(TripStatus.AVAILABLE, origin, destination, dateStart, dateEnd, pageable)
                 .map(this::toResponse);
     }

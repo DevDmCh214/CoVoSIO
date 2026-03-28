@@ -25,19 +25,19 @@ public interface TripRepository extends JpaRepository<Trip, UUID> {
             SELECT t FROM Trip t
             WHERE t.status = :status
               AND t.seatsAvailable > 0
-              AND (:origin      IS NULL OR LOWER(t.originLabel)      LIKE LOWER(CONCAT('%', :origin,      '%')))
-              AND (:destination IS NULL OR LOWER(t.destinationLabel) LIKE LOWER(CONCAT('%', :destination, '%')))
-              AND (:dateStart   IS NULL OR t.departureAt >= :dateStart)
-              AND (:dateEnd     IS NULL OR t.departureAt <  :dateEnd)
+              AND (:origin      IS NULL OR LOWER(t.originLabel)      LIKE LOWER(CONCAT('%', CAST(:origin      AS string), '%')))
+              AND (:destination IS NULL OR LOWER(t.destinationLabel) LIKE LOWER(CONCAT('%', CAST(:destination AS string), '%')))
+              AND t.departureAt >= :dateStart
+              AND t.departureAt <  :dateEnd
             """,
            countQuery = """
             SELECT COUNT(t) FROM Trip t
             WHERE t.status = :status
               AND t.seatsAvailable > 0
-              AND (:origin      IS NULL OR LOWER(t.originLabel)      LIKE LOWER(CONCAT('%', :origin,      '%')))
-              AND (:destination IS NULL OR LOWER(t.destinationLabel) LIKE LOWER(CONCAT('%', :destination, '%')))
-              AND (:dateStart   IS NULL OR t.departureAt >= :dateStart)
-              AND (:dateEnd     IS NULL OR t.departureAt <  :dateEnd)
+              AND (:origin      IS NULL OR LOWER(t.originLabel)      LIKE LOWER(CONCAT('%', CAST(:origin      AS string), '%')))
+              AND (:destination IS NULL OR LOWER(t.destinationLabel) LIKE LOWER(CONCAT('%', CAST(:destination AS string), '%')))
+              AND t.departureAt >= :dateStart
+              AND t.departureAt <  :dateEnd
             """)
     Page<Trip> search(
             @Param("status")      TripStatus    status,
