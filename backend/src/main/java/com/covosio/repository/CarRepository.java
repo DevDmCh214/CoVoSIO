@@ -10,7 +10,7 @@ import java.util.UUID;
 
 public interface CarRepository extends JpaRepository<Car, UUID> {
 
-    List<Car> findByDriver_IdAndIsActiveTrue(UUID driverId);
+    List<Car> findByDriver_UserIdAndIsActiveTrue(UUID driverId);
 
     /**
      * Counts future AVAILABLE trips that use the given car.

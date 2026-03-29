@@ -49,13 +49,13 @@ public interface TripRepository extends JpaRepository<Trip, UUID> {
     );
 
     /** Driver's own trips, newest departure first (UC-D07). */
-    Page<Trip> findByDriver_IdOrderByDepartureAtDesc(UUID driverId, Pageable pageable);
+    Page<Trip> findByDriver_UserIdOrderByDepartureAtDesc(UUID driverId, Pageable pageable);
 
     /** AVAILABLE trips with at least one free seat — passenger map view (UC-P07). */
     Page<Trip> findByStatusAndSeatsAvailableGreaterThan(TripStatus status, int minSeats, Pageable pageable);
 
     /** All of a driver's trips regardless of status — driver map view (UC-D10). */
-    Page<Trip> findByDriver_Id(UUID driverId, Pageable pageable);
+    Page<Trip> findByDriver_UserId(UUID driverId, Pageable pageable);
 
     /**
      * Loads a trip with a pessimistic write lock for R02 (atomic seat check + decrement).
@@ -69,5 +69,5 @@ public interface TripRepository extends JpaRepository<Trip, UUID> {
     long countByStatus(TripStatus status);
 
     /** Role-change guard: checks whether a driver has any trips. */
-    boolean existsByDriver_Id(UUID driverId);
+    boolean existsByDriver_UserId(UUID driverId);
 }

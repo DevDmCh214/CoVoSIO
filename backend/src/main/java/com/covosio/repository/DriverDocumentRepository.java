@@ -11,7 +11,9 @@ import java.util.UUID;
 
 public interface DriverDocumentRepository extends JpaRepository<DriverDocument, UUID> {
 
-    List<DriverDocument> findByDriver_IdOrderByUploadedAtDesc(UUID driverId);
+    List<DriverDocument> findByApplication_IdOrderByUploadedAtDesc(UUID applicationId);
+
+    List<DriverDocument> findByCar_IdOrderByUploadedAtDesc(UUID carId);
 
     /** Admin: paginated documents filtered by status (UC-A13). */
     Page<DriverDocument> findByStatus(DocumentStatus status, Pageable pageable);

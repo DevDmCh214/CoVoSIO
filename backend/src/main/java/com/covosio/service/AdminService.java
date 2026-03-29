@@ -5,8 +5,6 @@ import com.covosio.entity.*;
 import com.covosio.exception.BusinessException;
 import com.covosio.exception.ResourceNotFoundException;
 import com.covosio.repository.*;
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.PersistenceContext;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -15,37 +13,39 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
  * Handles all admin use cases: user management (UC-A01–A06), trip moderation (UC-A07–A08),
  * reservation listing (UC-A09), review moderation (UC-A10), platform stats (UC-A11),
- * global map (UC-A12), and document review workflow (UC-A13–A15).
+ * global map (UC-A12), document review workflow (UC-A13–A15), and application review.
  */
 @Service
 @RequiredArgsConstructor
 public class AdminService {
 
-    private final UserRepository           userRepository;
-    private final TripRepository           tripRepository;
-    private final ReservationRepository    reservationRepository;
-    private final ReviewRepository         reviewRepository;
-    private final DriverDocumentRepository documentRepository;
-    private final RefreshTokenRepository   refreshTokenRepository;
-    private final CarRepository            carRepository;
-
-    @PersistenceContext
-    private EntityManager entityManager;
+    private final UserRepository              userRepository;
+    private final AdminRepository             adminRepository;
+    private final DriverProfileRepository     driverProfileRepository;
+    private final PassengerProfileRepository  passengerProfileRepository;
+    private final DriverApplicationRepository applicationRepository;
+    private final TripRepository              tripRepository;
+    private final ReservationRepository       reservationRepository;
+    private final ReviewRepository            reviewRepository;
+    private final DriverDocumentRepository    documentRepository;
+    private final RefreshTokenRepository      refreshTokenRepository;
+    private final CarRepository               carRepository;
 
     // -----------------------------------------------------------------------
     // UC-A01 — list all users (paginated)
     // -----------------------------------------------------------------------
 
     /**
-     * Returns all users, paginated (UC-A01).
+     * Returns all platform users, paginated (UC-A01).
      *
      * @param pageable pagination and sorting
-     * @return paginated list of all users with role-specific fields
+     * @return paginated list of all platform users with role-specific fields
      */
     @Transactional(readOnly = true)
     public Page<AdminUserResponse> getAllUsers(Pageable pageable) {
@@ -75,15 +75,14 @@ public class AdminService {
     // -----------------------------------------------------------------------
 
     /**
-     * Changes a user's role (PASSENGER / DRIVER / ADMIN) by restructuring the TPT
-     * sub-tables via native SQL (UC-A03–A05).
-     * If the user already has the requested role the call is a no-op.
+     * Changes a user's role (PASSENGER / DRIVER) by creating or removing profile rows.
+     * ADMIN role is not assignable here — admins are managed separately.
      *
      * @param userId     the target user UUID
-     * @param newRoleStr desired role string (case-insensitive)
+     * @param newRoleStr desired role string (case-insensitive): PASSENGER or DRIVER
      * @return updated AdminUserResponse
      * @throws ResourceNotFoundException if the user does not exist
-     * @throws BusinessException         if the role string is invalid
+     * @throws BusinessException         if the role string is invalid, or role change is blocked by dependent data
      */
     @Transactional
     public AdminUserResponse changeUserRole(UUID userId, String newRoleStr) {
@@ -91,39 +90,31 @@ public class AdminService {
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
 
         String newRole = newRoleStr.trim().toUpperCase();
-        if (!newRole.equals("PASSENGER") && !newRole.equals("DRIVER") && !newRole.equals("ADMIN")) {
+        if (!newRole.equals("PASSENGER") && !newRole.equals("DRIVER")) {
             throw new BusinessException(
-                    "Invalid role: " + newRoleStr + ". Allowed: PASSENGER, DRIVER, ADMIN");
+                    "Invalid role: " + newRoleStr + ". Allowed: PASSENGER, DRIVER");
         }
 
-        String currentRole = resolveRole(user);
+        boolean isDriver = driverProfileRepository.existsByUserId(userId);
+        String currentRole = isDriver ? "DRIVER" : "PASSENGER";
+
         if (currentRole.equals(newRole)) {
             return toAdminUserResponse(user);
         }
 
-        // Guard: cannot restructure TPT rows while dependent data references the subtype PK
-        if (user instanceof Passenger && reservationRepository.existsByPassenger_Id(userId)) {
-            throw new BusinessException(
-                    "Cannot change role: passenger has existing reservations. Remove them first.");
-        }
-        if (user instanceof Driver && tripRepository.existsByDriver_Id(userId)) {
-            throw new BusinessException(
-                    "Cannot change role: driver has existing trips. Remove them first.");
+        if ("DRIVER".equals(newRole)) {
+            DriverProfile dp = DriverProfile.builder().user(user).build();
+            driverProfileRepository.save(dp);
+        } else {
+            // PASSENGER — remove driver profile
+            if (tripRepository.existsByDriver_UserId(userId)) {
+                throw new BusinessException(
+                        "Cannot remove driver role: driver has existing trips. Remove them first.");
+            }
+            driverProfileRepository.deleteById(userId);
         }
 
-        // Restructure TPT tables: delete old subtype row, insert new one, update dtype
-        deleteFromSubtypeTable(userId, currentRole);
-        insertIntoSubtypeTable(userId, newRole);
-        entityManager.createNativeQuery("UPDATE users SET dtype = :dtype WHERE id = :id")
-                .setParameter("dtype", newRole)
-                .setParameter("id", userId)
-                .executeUpdate();
-        entityManager.flush();
-        entityManager.clear();
-
-        User updated = userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found after role change"));
-        return toAdminUserResponse(updated);
+        return toAdminUserResponse(user);
     }
 
     // -----------------------------------------------------------------------
@@ -275,7 +266,6 @@ public class AdminService {
 
     /**
      * Returns aggregated platform statistics (UC-A11).
-     * Uses individual JPQL/native count queries compatible with both PostgreSQL and H2.
      *
      * @return PlatformStatsResponse with all counters
      */
@@ -283,16 +273,16 @@ public class AdminService {
     public PlatformStatsResponse getPlatformStats() {
         return PlatformStatsResponse.builder()
                 .totalUsers(userRepository.count())
-                .totalDrivers(userRepository.countByDtype("DRIVER"))
-                .totalPassengers(userRepository.countByDtype("PASSENGER"))
-                .totalAdmins(userRepository.countByDtype("ADMIN"))
+                .totalDrivers(driverProfileRepository.count())
+                .totalPassengers(passengerProfileRepository.count())
+                .totalAdmins(adminRepository.count())
                 .totalTrips(tripRepository.count())
                 .totalAvailableTrips(tripRepository.countByStatus(TripStatus.AVAILABLE))
                 .totalCompletedTrips(tripRepository.countByStatus(TripStatus.COMPLETED))
                 .totalReservations(reservationRepository.count())
                 .totalConfirmedReservations(reservationRepository.countByStatus(ReservationStatus.CONFIRMED))
                 .totalReviews(reviewRepository.count())
-                .totalPendingDocuments(documentRepository.countByStatus(DocumentStatus.PENDING))
+                .totalPendingDocuments(applicationRepository.countByStatus(ApplicationStatus.PENDING))
                 .build();
     }
 
@@ -321,7 +311,7 @@ public class AdminService {
      *
      * @param statusStr document status filter (PENDING, APPROVED, REJECTED) — optional
      * @param pageable  pagination and sorting
-     * @return paginated page of documents with driver info
+     * @return paginated page of documents with uploader info
      * @throws BusinessException if an invalid status string is provided
      */
     @Transactional(readOnly = true)
@@ -340,15 +330,13 @@ public class AdminService {
     }
 
     // -----------------------------------------------------------------------
-    // UC-A14 — approve or reject a document (R08, R11)
+    // UC-A14 — review a CAR_REGISTRATION document (R08)
     // -----------------------------------------------------------------------
 
     /**
-     * Reviews a driver document as an admin: approves or rejects it (UC-A14).
-     * On APPROVED:
-     *   — LICENSE: sets driver.licenseVerified = true (R08)
-     *   — CAR_REGISTRATION: sets car.registrationVerified = true (R08)
-     * A rejectionReason is mandatory when the status is REJECTED.
+     * Reviews a CAR_REGISTRATION document as an admin (UC-A14).
+     * On APPROVED: sets car.registrationVerified = true (R08).
+     * Use reviewApplication() for LICENSE document review and driver promotion.
      *
      * @param documentId the document UUID
      * @param request    review outcome (APPROVED or REJECTED) and optional rejection reason
@@ -356,7 +344,8 @@ public class AdminService {
      * @return updated DocumentResponse
      * @throws ResourceNotFoundException if the document does not exist
      * @throws BusinessException         if the document was already reviewed,
-     *                                   or the rejection reason is missing when rejecting
+     *                                   the rejection reason is missing when rejecting,
+     *                                   or the document is not a CAR_REGISTRATION
      */
     @Transactional
     public DocumentResponse reviewDocument(UUID documentId,
@@ -366,6 +355,11 @@ public class AdminService {
 
         DriverDocument document = documentRepository.findById(documentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Document not found: " + documentId));
+
+        if (document.getType() != DocumentType.CAR_REGISTRATION) {
+            throw new BusinessException(
+                    "Use PUT /admin/applications/{id}/review to review LICENSE documents");
+        }
 
         if (document.getStatus() != DocumentStatus.PENDING) {
             throw new BusinessException("Document has already been reviewed");
@@ -385,21 +379,88 @@ public class AdminService {
         document.setReviewedBy(admin);
         document.setReviewedAt(LocalDateTime.now());
 
-        // R08 — set verification flags when a document is approved
-        if (request.getStatus() == DocumentStatus.APPROVED) {
-            Driver driver = document.getDriver();
-            if (document.getType() == DocumentType.LICENSE) {
-                driver.setLicenseVerified(true);
-                userRepository.save(driver);
-            } else if (document.getType() == DocumentType.CAR_REGISTRATION
-                    && document.getCar() != null) {
-                Car car = document.getCar();
-                car.setRegistrationVerified(true);
-                carRepository.save(car);
-            }
+        // R08 — set car.registrationVerified when approved
+        if (request.getStatus() == DocumentStatus.APPROVED && document.getCar() != null) {
+            Car car = document.getCar();
+            car.setRegistrationVerified(true);
+            carRepository.save(car);
         }
 
         return toDocumentResponse(documentRepository.save(document));
+    }
+
+    // -----------------------------------------------------------------------
+    // Application review — driver promotion
+    // -----------------------------------------------------------------------
+
+    /**
+     * Reviews a driver application: approves or rejects it.
+     * On APPROVED: creates a DriverProfile row (promotes user to driver).
+     *
+     * @param applicationId the application UUID
+     * @param request       review outcome and optional rejection reason
+     * @param adminEmail    the authenticated admin's email
+     * @return updated DriverApplicationResponse
+     * @throws ResourceNotFoundException if the application does not exist
+     * @throws BusinessException         if already reviewed or invalid status
+     */
+    @Transactional
+    public DriverApplicationResponse reviewApplication(UUID applicationId,
+                                                        AdminApplicationReviewRequest request,
+                                                        String adminEmail) {
+        Admin admin = loadAdmin(adminEmail);
+
+        DriverApplication application = applicationRepository.findById(applicationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Application not found: " + applicationId));
+
+        if (application.getStatus() != ApplicationStatus.PENDING) {
+            throw new BusinessException("Application has already been reviewed");
+        }
+        if (request.getStatus() == ApplicationStatus.REJECTED
+                && (request.getRejectionReason() == null || request.getRejectionReason().isBlank())) {
+            throw new BusinessException("A rejection reason is required when rejecting");
+        }
+        if (request.getStatus() == ApplicationStatus.PENDING) {
+            throw new BusinessException("PENDING is not a valid review outcome");
+        }
+
+        application.setStatus(request.getStatus());
+        application.setRejectionReason(request.getRejectionReason());
+        application.setReviewedBy(admin);
+        application.setReviewedAt(LocalDateTime.now());
+        applicationRepository.save(application);
+
+        if (request.getStatus() == ApplicationStatus.APPROVED) {
+            // Create driver_profiles row — the promotion
+            DriverProfile driverProfile = DriverProfile.builder()
+                    .user(application.getUser())
+                    .build();
+            driverProfileRepository.save(driverProfile);
+        }
+
+        return toApplicationResponse(application);
+    }
+
+    /**
+     * Returns driver applications filtered by status (paginated).
+     *
+     * @param statusStr application status filter (PENDING, APPROVED, REJECTED) — optional
+     * @param pageable  pagination and sorting
+     * @return paginated page of applications
+     */
+    @Transactional(readOnly = true)
+    public Page<DriverApplicationResponse> getApplications(String statusStr, Pageable pageable) {
+        if (statusStr == null || statusStr.isBlank()) {
+            return applicationRepository.findAll(pageable).map(this::toApplicationResponse);
+        }
+        ApplicationStatus status;
+        try {
+            status = ApplicationStatus.valueOf(statusStr.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException(
+                    "Invalid status: " + statusStr + ". Allowed: PENDING, APPROVED, REJECTED");
+        }
+        return applicationRepository.findByStatus(status, pageable).map(this::toApplicationResponse);
     }
 
     // -----------------------------------------------------------------------
@@ -407,9 +468,8 @@ public class AdminService {
     // -----------------------------------------------------------------------
 
     /**
-     * Sends a re-notification to a driver about their pending document (UC-A15).
-     * This validates the document exists; the actual notification channel (email, push)
-     * is handled externally and is out of scope for this backend implementation.
+     * Sends a re-notification to a user about their pending application/document (UC-A15).
+     * Validates the document exists; the actual notification channel is handled externally.
      *
      * @param documentId the document UUID
      * @throws ResourceNotFoundException if the document does not exist
@@ -426,56 +486,13 @@ public class AdminService {
     // -----------------------------------------------------------------------
 
     private Admin loadAdmin(String email) {
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + email));
-        if (!(user instanceof Admin admin)) {
-            throw new AccessDeniedException("Only admins can perform this action");
-        }
-        return admin;
-    }
-
-    private String resolveRole(User user) {
-        if (user instanceof Passenger) return "PASSENGER";
-        if (user instanceof Driver)    return "DRIVER";
-        if (user instanceof Admin)     return "ADMIN";
-        throw new BusinessException("Unknown user type");
-    }
-
-    private void deleteFromSubtypeTable(UUID id, String role) {
-        String table = switch (role) {
-            case "PASSENGER" -> "passengers";
-            case "DRIVER"    -> "drivers";
-            case "ADMIN"     -> "admins";
-            default -> throw new BusinessException("Unknown role: " + role);
-        };
-        entityManager.createNativeQuery("DELETE FROM " + table + " WHERE user_id = :id")
-                .setParameter("id", id)
-                .executeUpdate();
-    }
-
-    private void insertIntoSubtypeTable(UUID id, String role) {
-        switch (role) {
-            case "PASSENGER" -> entityManager
-                    .createNativeQuery(
-                            "INSERT INTO passengers (user_id, total_trips_done) VALUES (:id, 0)")
-                    .setParameter("id", id)
-                    .executeUpdate();
-            case "DRIVER" -> entityManager
-                    .createNativeQuery(
-                            "INSERT INTO drivers (user_id, license_verified, total_trips_driven, acceptance_rate)"
-                            + " VALUES (:id, false, 0, 0.00)")
-                    .setParameter("id", id)
-                    .executeUpdate();
-            case "ADMIN" -> entityManager
-                    .createNativeQuery(
-                            "INSERT INTO admins (user_id) VALUES (:id)")
-                    .setParameter("id", id)
-                    .executeUpdate();
-            default -> throw new BusinessException("Unknown role: " + role);
-        }
+        return adminRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("Admin not found: " + email));
     }
 
     private AdminUserResponse toAdminUserResponse(User user) {
+        Optional<DriverProfile> dp = driverProfileRepository.findByUserId(user.getId());
+        String role = dp.isPresent() ? "DRIVER" : "PASSENGER";
         AdminUserResponse.AdminUserResponseBuilder builder = AdminUserResponse.builder()
                 .id(user.getId())
                 .email(user.getEmail())
@@ -483,19 +500,13 @@ public class AdminService {
                 .lastName(user.getLastName())
                 .phone(user.getPhone())
                 .avatarUrl(user.getAvatarUrl())
-                .avgRating(user.getAvgRating())
+                .avgRating(dp.map(DriverProfile::getAvgRating).orElse(null))
                 .isActive(user.getIsActive())
-                .createdAt(user.getCreatedAt());
+                .createdAt(user.getCreatedAt())
+                .role(role);
 
-        if (user instanceof Driver d) {
-            builder.role("DRIVER")
-                   .licenseVerified(d.getLicenseVerified())
-                   .licenseNumber(d.getLicenseNumber());
-        } else if (user instanceof Passenger) {
-            builder.role("PASSENGER");
-        } else if (user instanceof Admin a) {
-            builder.role("ADMIN")
-                   .permissions(a.getPermissions());
+        if (dp.isPresent()) {
+            builder.licenseNumber(dp.get().getLicenseNumber());
         }
 
         return builder.build();
@@ -504,9 +515,9 @@ public class AdminService {
     private TripResponse toTripResponse(Trip t) {
         return TripResponse.builder()
                 .id(t.getId())
-                .driverId(t.getDriver().getId())
-                .driverFirstName(t.getDriver().getFirstName())
-                .driverLastName(t.getDriver().getLastName())
+                .driverId(t.getDriver().getUserId())
+                .driverFirstName(t.getDriver().getUser().getFirstName())
+                .driverLastName(t.getDriver().getUser().getLastName())
                 .driverAvgRating(t.getDriver().getAvgRating())
                 .carId(t.getCar()    != null ? t.getCar().getId()    : null)
                 .carBrand(t.getCar() != null ? t.getCar().getBrand() : null)
@@ -579,6 +590,18 @@ public class AdminService {
     }
 
     private DocumentResponse toDocumentResponse(DriverDocument doc) {
+        UUID uploaderId = null;
+        String uploaderFirstName = null;
+        String uploaderLastName = null;
+        if (doc.getApplication() != null && doc.getApplication().getUser() != null) {
+            uploaderId = doc.getApplication().getUser().getId();
+            uploaderFirstName = doc.getApplication().getUser().getFirstName();
+            uploaderLastName = doc.getApplication().getUser().getLastName();
+        } else if (doc.getCar() != null && doc.getCar().getDriver() != null) {
+            uploaderId = doc.getCar().getDriver().getUserId();
+            uploaderFirstName = doc.getCar().getDriver().getUser().getFirstName();
+            uploaderLastName = doc.getCar().getDriver().getUser().getLastName();
+        }
         return DocumentResponse.builder()
                 .id(doc.getId())
                 .type(doc.getType())
@@ -586,11 +609,25 @@ public class AdminService {
                 .status(doc.getStatus())
                 .rejectionReason(doc.getRejectionReason())
                 .carId(doc.getCar() != null ? doc.getCar().getId() : null)
-                .driverId(doc.getDriver().getId())
-                .driverFirstName(doc.getDriver().getFirstName())
-                .driverLastName(doc.getDriver().getLastName())
+                .driverId(uploaderId)
+                .driverFirstName(uploaderFirstName)
+                .driverLastName(uploaderLastName)
                 .uploadedAt(doc.getUploadedAt())
                 .reviewedAt(doc.getReviewedAt())
+                .build();
+    }
+
+    private DriverApplicationResponse toApplicationResponse(DriverApplication app) {
+        return DriverApplicationResponse.builder()
+                .id(app.getId())
+                .userId(app.getUser().getId())
+                .userFirstName(app.getUser().getFirstName())
+                .userLastName(app.getUser().getLastName())
+                .userEmail(app.getUser().getEmail())
+                .status(app.getStatus())
+                .rejectionReason(app.getRejectionReason())
+                .appliedAt(app.getAppliedAt())
+                .reviewedAt(app.getReviewedAt())
                 .build();
     }
 }

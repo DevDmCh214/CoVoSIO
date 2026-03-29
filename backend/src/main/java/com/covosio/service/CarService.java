@@ -3,11 +3,12 @@ package com.covosio.service;
 import com.covosio.dto.CarRequest;
 import com.covosio.dto.CarResponse;
 import com.covosio.entity.Car;
-import com.covosio.entity.Driver;
+import com.covosio.entity.DriverProfile;
 import com.covosio.entity.User;
 import com.covosio.exception.BusinessException;
 import com.covosio.exception.ResourceNotFoundException;
 import com.covosio.repository.CarRepository;
+import com.covosio.repository.DriverProfileRepository;
 import com.covosio.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.AccessDeniedException;
@@ -27,6 +28,7 @@ public class CarService {
 
     private final CarRepository carRepository;
     private final UserRepository userRepository;
+    private final DriverProfileRepository driverProfileRepository;
 
     /**
      * Adds a new car for the currently authenticated driver (UC-D01).
@@ -39,10 +41,10 @@ public class CarService {
      */
     @Transactional
     public CarResponse addCar(String driverEmail, CarRequest request) {
-        Driver driver = loadDriver(driverEmail);
+        DriverProfile driverProfile = loadDriverProfile(driverEmail);
 
         Car car = Car.builder()
-                .driver(driver)
+                .driver(driverProfile)
                 .brand(request.getBrand())
                 .model(request.getModel())
                 .color(request.getColor())
@@ -68,12 +70,12 @@ public class CarService {
      */
     @Transactional
     public void deleteCar(UUID carId, String driverEmail) {
-        Driver driver = loadDriver(driverEmail);
+        DriverProfile driverProfile = loadDriverProfile(driverEmail);
 
         Car car = carRepository.findById(carId)
                 .orElseThrow(() -> new ResourceNotFoundException("Car not found: " + carId));
 
-        if (!car.getDriver().getId().equals(driver.getId())) {
+        if (!car.getDriver().getUserId().equals(driverProfile.getUserId())) {
             throw new AccessDeniedException("Action not authorized");
         }
 
@@ -96,8 +98,8 @@ public class CarService {
      */
     @Transactional(readOnly = true)
     public List<CarResponse> getMyCars(String driverEmail) {
-        Driver driver = loadDriver(driverEmail);
-        return carRepository.findByDriver_IdAndIsActiveTrue(driver.getId())
+        DriverProfile driverProfile = loadDriverProfile(driverEmail);
+        return carRepository.findByDriver_UserIdAndIsActiveTrue(driverProfile.getUserId())
                 .stream()
                 .map(this::toResponse)
                 .toList();
@@ -105,13 +107,11 @@ public class CarService {
 
     // --- helpers ---
 
-    private Driver loadDriver(String email) {
+    private DriverProfile loadDriverProfile(String email) {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + email));
-        if (!(user instanceof Driver driver)) {
-            throw new AccessDeniedException("Only drivers can manage cars");
-        }
-        return driver;
+        return driverProfileRepository.findByUserId(user.getId())
+                .orElseThrow(() -> new AccessDeniedException("Only drivers can manage cars"));
     }
 
     private CarResponse toResponse(Car car) {

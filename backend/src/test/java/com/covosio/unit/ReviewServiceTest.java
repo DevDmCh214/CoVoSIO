@@ -5,6 +5,8 @@ import com.covosio.dto.ReviewResponse;
 import com.covosio.entity.*;
 import com.covosio.exception.BusinessException;
 import com.covosio.exception.ResourceNotFoundException;
+import com.covosio.repository.DriverProfileRepository;
+import com.covosio.repository.PassengerProfileRepository;
 import com.covosio.repository.ReservationRepository;
 import com.covosio.repository.ReviewRepository;
 import com.covosio.repository.UserRepository;
@@ -28,9 +30,11 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class ReviewServiceTest {
 
-    @Mock private ReviewRepository      reviewRepository;
-    @Mock private ReservationRepository reservationRepository;
-    @Mock private UserRepository        userRepository;
+    @Mock private ReviewRepository         reviewRepository;
+    @Mock private ReservationRepository    reservationRepository;
+    @Mock private UserRepository           userRepository;
+    @Mock private DriverProfileRepository  driverProfileRepository;
+    @Mock private PassengerProfileRepository passengerProfileRepository;
 
     @InjectMocks
     private ReviewService reviewService;
@@ -39,13 +43,16 @@ class ReviewServiceTest {
 
     @Test
     void createReview_shouldCreateReview_whenPassengerReviewsDriver() {
-        Driver    driver      = buildDriver("driver@test.com");
-        Passenger passenger   = buildPassenger("pass@test.com");
-        Trip      trip        = buildTrip(driver, TripStatus.COMPLETED);
+        User driverUser    = buildUser("driver@test.com");
+        DriverProfile driverProfile = buildDriverProfile(driverUser);
+        User passenger     = buildUser("pass@test.com");
+        Trip trip          = buildTrip(driverProfile, TripStatus.COMPLETED);
         Reservation reservation = buildReservation(trip, passenger);
 
         when(userRepository.findByEmail("pass@test.com")).thenReturn(Optional.of(passenger));
         when(reservationRepository.findById(reservation.getId())).thenReturn(Optional.of(reservation));
+        // passenger is not a driver
+        when(driverProfileRepository.existsByUserId(passenger.getId())).thenReturn(false);
         when(reviewRepository.existsByReservation_IdAndDirection(
                 reservation.getId(), ReviewDirection.PASSENGER_TO_DRIVER)).thenReturn(false);
         when(reviewRepository.save(any(Review.class))).thenAnswer(inv -> {
@@ -54,9 +61,10 @@ class ReviewServiceTest {
             r.setCreatedAt(LocalDateTime.now());
             return r;
         });
-        when(reviewRepository.findAverageRatingByTargetId(driver.getId()))
+        when(reviewRepository.findAverageRatingByTargetId(driverUser.getId()))
                 .thenReturn(Optional.of(4.5));
-        when(userRepository.save(driver)).thenReturn(driver);
+        when(driverProfileRepository.findByUserId(driverUser.getId()))
+                .thenReturn(Optional.of(driverProfile));
 
         ReviewResponse response = reviewService.createReview(
                 "pass@test.com", reservation.getId(), buildRequest(5, "Great driver!"));
@@ -64,20 +72,23 @@ class ReviewServiceTest {
         assertThat(response.getDirection()).isEqualTo(ReviewDirection.PASSENGER_TO_DRIVER);
         assertThat(response.getRating()).isEqualTo(5);
         assertThat(response.getComment()).isEqualTo("Great driver!");
-        assertThat(driver.getAvgRating()).isEqualByComparingTo("4.50");
+        assertThat(driverProfile.getAvgRating()).isEqualByComparingTo("4.50");
         verify(reviewRepository).save(any(Review.class));
-        verify(userRepository).save(driver);
+        verify(driverProfileRepository).save(driverProfile);
     }
 
     @Test
     void createReview_shouldCreateReview_whenDriverReviewsPassenger() {
-        Driver    driver      = buildDriver("driver@test.com");
-        Passenger passenger   = buildPassenger("pass@test.com");
-        Trip      trip        = buildTrip(driver, TripStatus.COMPLETED);
+        User driverUser    = buildUser("driver@test.com");
+        DriverProfile driverProfile = buildDriverProfile(driverUser);
+        User passenger     = buildUser("pass@test.com");
+        Trip trip          = buildTrip(driverProfile, TripStatus.COMPLETED);
         Reservation reservation = buildReservation(trip, passenger);
 
-        when(userRepository.findByEmail("driver@test.com")).thenReturn(Optional.of(driver));
+        when(userRepository.findByEmail("driver@test.com")).thenReturn(Optional.of(driverUser));
         when(reservationRepository.findById(reservation.getId())).thenReturn(Optional.of(reservation));
+        // driver is a driver and owns the trip
+        when(driverProfileRepository.existsByUserId(driverUser.getId())).thenReturn(true);
         when(reviewRepository.existsByReservation_IdAndDirection(
                 reservation.getId(), ReviewDirection.DRIVER_TO_PASSENGER)).thenReturn(false);
         when(reviewRepository.save(any(Review.class))).thenAnswer(inv -> {
@@ -92,7 +103,7 @@ class ReviewServiceTest {
 
         assertThat(response.getDirection()).isEqualTo(ReviewDirection.DRIVER_TO_PASSENGER);
         assertThat(response.getRating()).isEqualTo(4);
-        // Driver's own avg_rating must NOT be recalculated
+        // Driver's avg_rating must NOT be recalculated on DRIVER_TO_PASSENGER review
         verify(userRepository, never()).save(any());
     }
 
@@ -100,9 +111,10 @@ class ReviewServiceTest {
 
     @Test
     void createReview_shouldThrowBusinessException_whenTripNotCompleted() {
-        Driver    driver      = buildDriver("driver@test.com");
-        Passenger passenger   = buildPassenger("pass@test.com");
-        Trip      trip        = buildTrip(driver, TripStatus.AVAILABLE); // not completed
+        User driverUser    = buildUser("driver@test.com");
+        DriverProfile driverProfile = buildDriverProfile(driverUser);
+        User passenger     = buildUser("pass@test.com");
+        Trip trip          = buildTrip(driverProfile, TripStatus.AVAILABLE); // not completed
         Reservation reservation = buildReservation(trip, passenger);
 
         when(userRepository.findByEmail("pass@test.com")).thenReturn(Optional.of(passenger));
@@ -118,13 +130,15 @@ class ReviewServiceTest {
 
     @Test
     void createReview_shouldThrowBusinessException_whenReviewAlreadyExists() {
-        Driver    driver      = buildDriver("driver@test.com");
-        Passenger passenger   = buildPassenger("pass@test.com");
-        Trip      trip        = buildTrip(driver, TripStatus.COMPLETED);
+        User driverUser    = buildUser("driver@test.com");
+        DriverProfile driverProfile = buildDriverProfile(driverUser);
+        User passenger     = buildUser("pass@test.com");
+        Trip trip          = buildTrip(driverProfile, TripStatus.COMPLETED);
         Reservation reservation = buildReservation(trip, passenger);
 
         when(userRepository.findByEmail("pass@test.com")).thenReturn(Optional.of(passenger));
         when(reservationRepository.findById(reservation.getId())).thenReturn(Optional.of(reservation));
+        when(driverProfileRepository.existsByUserId(passenger.getId())).thenReturn(false);
         when(reviewRepository.existsByReservation_IdAndDirection(
                 reservation.getId(), ReviewDirection.PASSENGER_TO_DRIVER)).thenReturn(true);
 
@@ -138,14 +152,16 @@ class ReviewServiceTest {
 
     @Test
     void createReview_shouldThrowAccessDeniedException_whenPassengerNotOwner() {
-        Driver    driver      = buildDriver("driver@test.com");
-        Passenger passenger   = buildPassenger("pass@test.com");
-        Passenger other       = buildPassenger("other@test.com");
-        Trip      trip        = buildTrip(driver, TripStatus.COMPLETED);
+        User driverUser    = buildUser("driver@test.com");
+        DriverProfile driverProfile = buildDriverProfile(driverUser);
+        User passenger     = buildUser("pass@test.com");
+        User other         = buildUser("other@test.com");
+        Trip trip          = buildTrip(driverProfile, TripStatus.COMPLETED);
         Reservation reservation = buildReservation(trip, other); // owned by 'other'
 
         when(userRepository.findByEmail("pass@test.com")).thenReturn(Optional.of(passenger));
         when(reservationRepository.findById(reservation.getId())).thenReturn(Optional.of(reservation));
+        when(driverProfileRepository.existsByUserId(passenger.getId())).thenReturn(false);
 
         assertThatThrownBy(() ->
                 reviewService.createReview("pass@test.com", reservation.getId(), buildRequest(4, null)))
@@ -154,14 +170,18 @@ class ReviewServiceTest {
 
     @Test
     void createReview_shouldThrowAccessDeniedException_whenDriverNotOwner() {
-        Driver    driver      = buildDriver("driver@test.com");
-        Driver    otherDriver = buildDriver("other@test.com");
-        Passenger passenger   = buildPassenger("pass@test.com");
-        Trip      trip        = buildTrip(otherDriver, TripStatus.COMPLETED); // owned by other driver
+        User driverUser     = buildUser("driver@test.com");
+        DriverProfile driverProfile = buildDriverProfile(driverUser);
+        User otherDriverUser = buildUser("other@test.com");
+        DriverProfile otherProfile = buildDriverProfile(otherDriverUser);
+        User passenger      = buildUser("pass@test.com");
+        Trip trip           = buildTrip(otherProfile, TripStatus.COMPLETED); // owned by other driver
         Reservation reservation = buildReservation(trip, passenger);
 
-        when(userRepository.findByEmail("driver@test.com")).thenReturn(Optional.of(driver));
+        when(userRepository.findByEmail("driver@test.com")).thenReturn(Optional.of(driverUser));
         when(reservationRepository.findById(reservation.getId())).thenReturn(Optional.of(reservation));
+        // driver@test.com has a driver profile, but is NOT the trip driver
+        when(driverProfileRepository.existsByUserId(driverUser.getId())).thenReturn(true);
 
         assertThatThrownBy(() ->
                 reviewService.createReview("driver@test.com", reservation.getId(), buildRequest(3, null)))
@@ -170,8 +190,8 @@ class ReviewServiceTest {
 
     @Test
     void createReview_shouldThrowResourceNotFoundException_whenReservationNotFound() {
-        Passenger passenger     = buildPassenger("pass@test.com");
-        UUID      reservationId = UUID.randomUUID();
+        User passenger     = buildUser("pass@test.com");
+        UUID reservationId = UUID.randomUUID();
 
         when(userRepository.findByEmail("pass@test.com")).thenReturn(Optional.of(passenger));
         when(reservationRepository.findById(reservationId)).thenReturn(Optional.empty());
@@ -184,37 +204,30 @@ class ReviewServiceTest {
 
     // --- helpers ---
 
-    private Driver buildDriver(String email) {
-        Driver d = new Driver();
-        d.setId(UUID.randomUUID());
-        d.setEmail(email);
-        d.setPasswordHash("hashed");
-        d.setFirstName("Jean");
-        d.setLastName("Dupont");
-        d.setIsActive(true);
-        d.setLicenseVerified(true);
-        d.setTotalTripsDriven(0);
-        d.setAvgRating(BigDecimal.ZERO);
-        return d;
+    private User buildUser(String email) {
+        return User.builder()
+                .id(UUID.randomUUID())
+                .email(email)
+                .passwordHash("hashed")
+                .firstName("Jean")
+                .lastName("Dupont")
+                .isActive(true)
+                .build();
     }
 
-    private Passenger buildPassenger(String email) {
-        Passenger p = new Passenger();
-        p.setId(UUID.randomUUID());
-        p.setEmail(email);
-        p.setPasswordHash("hashed");
-        p.setFirstName("Alice");
-        p.setLastName("Martin");
-        p.setIsActive(true);
-        p.setTotalTripsDone(0);
-        p.setAvgRating(BigDecimal.ZERO);
-        return p;
+    private DriverProfile buildDriverProfile(User user) {
+        return DriverProfile.builder()
+                .userId(user.getId())
+                .user(user)
+                .avgRating(BigDecimal.ZERO)
+                .totalTripsDriven(0)
+                .build();
     }
 
-    private Trip buildTrip(Driver driver, TripStatus status) {
+    private Trip buildTrip(DriverProfile driverProfile, TripStatus status) {
         Trip t = new Trip();
         t.setId(UUID.randomUUID());
-        t.setDriver(driver);
+        t.setDriver(driverProfile);
         t.setOriginLabel("Paris, France");
         t.setOriginLat(BigDecimal.valueOf(48.8566));
         t.setOriginLng(BigDecimal.valueOf(2.3522));
@@ -231,7 +244,7 @@ class ReviewServiceTest {
         return t;
     }
 
-    private Reservation buildReservation(Trip trip, Passenger passenger) {
+    private Reservation buildReservation(Trip trip, User passenger) {
         Reservation r = new Reservation();
         r.setId(UUID.randomUUID());
         r.setTrip(trip);

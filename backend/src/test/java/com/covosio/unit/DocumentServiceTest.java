@@ -6,7 +6,9 @@ import com.covosio.entity.*;
 import com.covosio.exception.BusinessException;
 import com.covosio.exception.ResourceNotFoundException;
 import com.covosio.repository.CarRepository;
+import com.covosio.repository.DriverApplicationRepository;
 import com.covosio.repository.DriverDocumentRepository;
+import com.covosio.repository.DriverProfileRepository;
 import com.covosio.repository.UserRepository;
 import com.covosio.service.DocumentService;
 import org.junit.jupiter.api.BeforeEach;
@@ -20,6 +22,7 @@ import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.math.BigDecimal;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -33,9 +36,11 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class DocumentServiceTest {
 
-    @Mock private DriverDocumentRepository documentRepository;
-    @Mock private UserRepository userRepository;
-    @Mock private CarRepository carRepository;
+    @Mock private DriverDocumentRepository   documentRepository;
+    @Mock private UserRepository             userRepository;
+    @Mock private CarRepository              carRepository;
+    @Mock private DriverApplicationRepository applicationRepository;
+    @Mock private DriverProfileRepository    driverProfileRepository;
 
     @InjectMocks
     private DocumentService documentService;
@@ -48,12 +53,20 @@ class DocumentServiceTest {
         ReflectionTestUtils.setField(documentService, "uploadDir", tempDir.toString());
     }
 
-    // --- upload (UC-D11) ---
+    // --- upload LICENSE (UC-D11) ---
 
     @Test
     void upload_shouldSaveDocument_whenFileIsValidJpeg() {
-        Driver driver = buildDriver("driver@test.com");
-        when(userRepository.findByEmail("driver@test.com")).thenReturn(Optional.of(driver));
+        User user = buildUser("user@test.com");
+        when(userRepository.findByEmail("user@test.com")).thenReturn(Optional.of(user));
+        when(driverProfileRepository.existsByUserId(user.getId())).thenReturn(false);
+        when(applicationRepository.findByUser_IdAndStatus(user.getId(), ApplicationStatus.PENDING))
+                .thenReturn(Optional.empty());
+        when(applicationRepository.save(any(DriverApplication.class))).thenAnswer(inv -> {
+            DriverApplication a = inv.getArgument(0);
+            a.setId(UUID.randomUUID());
+            return a;
+        });
         when(documentRepository.save(any(DriverDocument.class))).thenAnswer(inv -> {
             DriverDocument d = inv.getArgument(0);
             d.setId(UUID.randomUUID());
@@ -63,7 +76,7 @@ class DocumentServiceTest {
 
         MockMultipartFile file = jpegFile("license.jpg");
 
-        DocumentResponse response = documentService.upload("driver@test.com", file, "LICENSE", null);
+        DocumentResponse response = documentService.upload("user@test.com", file, "LICENSE", null);
 
         assertThat(response.getType()).isEqualTo(DocumentType.LICENSE);
         assertThat(response.getMimeType()).isEqualTo("image/jpeg");
@@ -74,11 +87,13 @@ class DocumentServiceTest {
 
     @Test
     void upload_shouldSaveDocument_whenFileIsValidPdfAndTypeIsCarRegistration() {
-        Driver driver = buildDriver("driver@test.com");
+        User user = buildUser("driver@test.com");
+        DriverProfile driverProfile = buildDriverProfile(user);
         UUID carId = UUID.randomUUID();
-        Car car = buildCar(carId, driver);
+        Car car = buildCar(carId, driverProfile);
 
-        when(userRepository.findByEmail("driver@test.com")).thenReturn(Optional.of(driver));
+        when(userRepository.findByEmail("driver@test.com")).thenReturn(Optional.of(user));
+        when(driverProfileRepository.findByUserId(user.getId())).thenReturn(Optional.of(driverProfile));
         when(carRepository.findById(carId)).thenReturn(Optional.of(car));
         when(documentRepository.save(any(DriverDocument.class))).thenAnswer(inv -> {
             DriverDocument d = inv.getArgument(0);
@@ -106,18 +121,30 @@ class DocumentServiceTest {
     }
 
     @Test
-    void upload_shouldThrowAccessDeniedException_whenUserIsNotDriver() {
-        Passenger passenger = buildPassenger("passenger@test.com");
-        when(userRepository.findByEmail("passenger@test.com")).thenReturn(Optional.of(passenger));
+    void upload_shouldThrowBusinessException_whenUserIsAlreadyADriver() {
+        User user = buildUser("driver@test.com");
+        when(userRepository.findByEmail("driver@test.com")).thenReturn(Optional.of(user));
+        when(driverProfileRepository.existsByUserId(user.getId())).thenReturn(true);
 
-        assertThatThrownBy(() -> documentService.upload("passenger@test.com", jpegFile("f.jpg"), "LICENSE", null))
+        assertThatThrownBy(() -> documentService.upload("driver@test.com", jpegFile("f.jpg"), "LICENSE", null))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("already a verified driver");
+    }
+
+    @Test
+    void upload_shouldThrowAccessDeniedException_whenUserIsNotDriverForCarRegistration() {
+        User user = buildUser("user@test.com");
+        when(userRepository.findByEmail("user@test.com")).thenReturn(Optional.of(user));
+        when(driverProfileRepository.findByUserId(user.getId())).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> documentService.upload("user@test.com", pdfFile("f.pdf"), "CAR_REGISTRATION", UUID.randomUUID()))
                 .isInstanceOf(AccessDeniedException.class);
     }
 
     @Test
     void upload_shouldThrowBusinessException_whenFileTooLarge() {
-        Driver driver = buildDriver("driver@test.com");
-        when(userRepository.findByEmail("driver@test.com")).thenReturn(Optional.of(driver));
+        User user = buildUser("user@test.com");
+        when(userRepository.findByEmail("user@test.com")).thenReturn(Optional.of(user));
 
         byte[] oversized = new byte[6 * 1024 * 1024]; // 6 MB — fill first 3 bytes with JPEG magic
         oversized[0] = (byte) 0xFF;
@@ -125,43 +152,44 @@ class DocumentServiceTest {
         oversized[2] = (byte) 0xFF;
         MockMultipartFile file = new MockMultipartFile("file", "big.jpg", "image/jpeg", oversized);
 
-        assertThatThrownBy(() -> documentService.upload("driver@test.com", file, "LICENSE", null))
+        assertThatThrownBy(() -> documentService.upload("user@test.com", file, "LICENSE", null))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("5 MB");
     }
 
     @Test
     void upload_shouldThrowBusinessException_whenFileTypeNotAllowed() {
-        Driver driver = buildDriver("driver@test.com");
-        when(userRepository.findByEmail("driver@test.com")).thenReturn(Optional.of(driver));
+        User user = buildUser("user@test.com");
+        when(userRepository.findByEmail("user@test.com")).thenReturn(Optional.of(user));
 
         // GIF magic: 47 49 46 38
         byte[] gifBytes = {0x47, 0x49, 0x46, 0x38, 0x00, 0x00, 0x00, 0x00};
         MockMultipartFile file = new MockMultipartFile("file", "image.gif", "image/gif", gifBytes);
 
-        assertThatThrownBy(() -> documentService.upload("driver@test.com", file, "LICENSE", null))
+        assertThatThrownBy(() -> documentService.upload("user@test.com", file, "LICENSE", null))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("JPEG, PNG, and PDF");
     }
 
     @Test
     void upload_shouldThrowBusinessException_whenMagicSignatureInvalid() {
-        Driver driver = buildDriver("driver@test.com");
-        when(userRepository.findByEmail("driver@test.com")).thenReturn(Optional.of(driver));
+        User user = buildUser("user@test.com");
+        when(userRepository.findByEmail("user@test.com")).thenReturn(Optional.of(user));
 
-        // Bytes that look like plain text, not a valid image
         byte[] fakeBytes = "not-a-real-file-header-here".getBytes();
         MockMultipartFile file = new MockMultipartFile("file", "fake.jpg", "image/jpeg", fakeBytes);
 
-        assertThatThrownBy(() -> documentService.upload("driver@test.com", file, "LICENSE", null))
+        assertThatThrownBy(() -> documentService.upload("user@test.com", file, "LICENSE", null))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("JPEG, PNG, and PDF");
     }
 
     @Test
     void upload_shouldThrowBusinessException_whenCarRegistrationMissingCarId() {
-        Driver driver = buildDriver("driver@test.com");
-        when(userRepository.findByEmail("driver@test.com")).thenReturn(Optional.of(driver));
+        User user = buildUser("driver@test.com");
+        DriverProfile driverProfile = buildDriverProfile(user);
+        when(userRepository.findByEmail("driver@test.com")).thenReturn(Optional.of(user));
+        when(driverProfileRepository.findByUserId(user.getId())).thenReturn(Optional.of(driverProfile));
 
         assertThatThrownBy(() -> documentService.upload("driver@test.com", pdfFile("f.pdf"), "CAR_REGISTRATION", null))
                 .isInstanceOf(BusinessException.class)
@@ -170,9 +198,11 @@ class DocumentServiceTest {
 
     @Test
     void upload_shouldThrowResourceNotFoundException_whenCarNotFound() {
-        Driver driver = buildDriver("driver@test.com");
+        User user = buildUser("driver@test.com");
+        DriverProfile driverProfile = buildDriverProfile(user);
         UUID carId = UUID.randomUUID();
-        when(userRepository.findByEmail("driver@test.com")).thenReturn(Optional.of(driver));
+        when(userRepository.findByEmail("driver@test.com")).thenReturn(Optional.of(user));
+        when(driverProfileRepository.findByUserId(user.getId())).thenReturn(Optional.of(driverProfile));
         when(carRepository.findById(carId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> documentService.upload("driver@test.com", pdfFile("f.pdf"), "CAR_REGISTRATION", carId))
@@ -182,12 +212,15 @@ class DocumentServiceTest {
 
     @Test
     void upload_shouldThrowAccessDeniedException_whenCarBelongsToAnotherDriver() {
-        Driver driver = buildDriver("driver@test.com");
-        Driver otherDriver = buildDriver("other@test.com");
+        User user = buildUser("driver@test.com");
+        DriverProfile driverProfile = buildDriverProfile(user);
+        User otherUser = buildUser("other@test.com");
+        DriverProfile otherProfile = buildDriverProfile(otherUser);
         UUID carId = UUID.randomUUID();
-        Car car = buildCar(carId, otherDriver);
+        Car car = buildCar(carId, otherProfile);
 
-        when(userRepository.findByEmail("driver@test.com")).thenReturn(Optional.of(driver));
+        when(userRepository.findByEmail("driver@test.com")).thenReturn(Optional.of(user));
+        when(driverProfileRepository.findByUserId(user.getId())).thenReturn(Optional.of(driverProfile));
         when(carRepository.findById(carId)).thenReturn(Optional.of(car));
 
         assertThatThrownBy(() -> documentService.upload("driver@test.com", pdfFile("f.pdf"), "CAR_REGISTRATION", carId))
@@ -197,15 +230,19 @@ class DocumentServiceTest {
     // --- getMyDocuments (UC-D12) ---
 
     @Test
-    void getMyDocuments_shouldReturnDocuments_whenDriverHasDocuments() {
-        Driver driver = buildDriver("driver@test.com");
-        DriverDocument doc = buildDocument(driver, DocumentType.LICENSE, null);
+    void getMyDocuments_shouldReturnDocuments_whenUserHasPendingApplication() {
+        User user = buildUser("user@test.com");
+        DriverApplication app = buildDriverApplication(user);
+        DriverDocument doc = buildDocument(app, DocumentType.LICENSE, null);
 
-        when(userRepository.findByEmail("driver@test.com")).thenReturn(Optional.of(driver));
-        when(documentRepository.findByDriver_IdOrderByUploadedAtDesc(driver.getId()))
+        when(userRepository.findByEmail("user@test.com")).thenReturn(Optional.of(user));
+        when(applicationRepository.findByUser_IdAndStatus(user.getId(), ApplicationStatus.PENDING))
+                .thenReturn(Optional.of(app));
+        when(documentRepository.findByApplication_IdOrderByUploadedAtDesc(app.getId()))
                 .thenReturn(List.of(doc));
+        when(driverProfileRepository.findByUserId(user.getId())).thenReturn(Optional.empty());
 
-        List<DocumentResponse> result = documentService.getMyDocuments("driver@test.com");
+        List<DocumentResponse> result = documentService.getMyDocuments("user@test.com");
 
         assertThat(result).hasSize(1);
         assertThat(result.get(0).getType()).isEqualTo(DocumentType.LICENSE);
@@ -213,12 +250,14 @@ class DocumentServiceTest {
     }
 
     @Test
-    void getMyDocuments_shouldReturnEmptyList_whenDriverHasNoDocuments() {
-        Driver driver = buildDriver("driver@test.com");
-        when(userRepository.findByEmail("driver@test.com")).thenReturn(Optional.of(driver));
-        when(documentRepository.findByDriver_IdOrderByUploadedAtDesc(driver.getId())).thenReturn(List.of());
+    void getMyDocuments_shouldReturnEmptyList_whenUserHasNoDocuments() {
+        User user = buildUser("user@test.com");
+        when(userRepository.findByEmail("user@test.com")).thenReturn(Optional.of(user));
+        when(applicationRepository.findByUser_IdAndStatus(user.getId(), ApplicationStatus.PENDING))
+                .thenReturn(Optional.empty());
+        when(driverProfileRepository.findByUserId(user.getId())).thenReturn(Optional.empty());
 
-        assertThat(documentService.getMyDocuments("driver@test.com")).isEmpty();
+        assertThat(documentService.getMyDocuments("user@test.com")).isEmpty();
     }
 
     @Test
@@ -232,23 +271,24 @@ class DocumentServiceTest {
     // --- getFile (UC-D12) ---
 
     @Test
-    void getFile_shouldReturnResource_whenDocumentBelongsToDriver() throws Exception {
-        Driver driver = buildDriver("driver@test.com");
+    void getFile_shouldReturnResource_whenDocumentBelongsToUser() throws Exception {
+        User user = buildUser("user@test.com");
+        DriverApplication app = buildDriverApplication(user);
         UUID docId = UUID.randomUUID();
 
         // Write a real file to tempDir so the resource exists
         Path fakeFile = tempDir.resolve("test.jpg");
         java.nio.file.Files.write(fakeFile, jpegBytes());
 
-        DriverDocument doc = buildDocument(driver, DocumentType.LICENSE, null);
+        DriverDocument doc = buildDocument(app, DocumentType.LICENSE, null);
         doc.setId(docId);
         doc.setFilePath(fakeFile.toString());
         doc.setMimeType("image/jpeg");
 
-        when(userRepository.findByEmail("driver@test.com")).thenReturn(Optional.of(driver));
+        when(userRepository.findByEmail("user@test.com")).thenReturn(Optional.of(user));
         when(documentRepository.findById(docId)).thenReturn(Optional.of(doc));
 
-        DocumentFileResult result = documentService.getFile(docId, "driver@test.com");
+        DocumentFileResult result = documentService.getFile(docId, "user@test.com");
 
         assertThat(result.resource().exists()).isTrue();
         assertThat(result.mimeType()).isEqualTo("image/jpeg");
@@ -256,63 +296,67 @@ class DocumentServiceTest {
 
     @Test
     void getFile_shouldThrowResourceNotFoundException_whenDocumentNotFound() {
-        Driver driver = buildDriver("driver@test.com");
+        User user = buildUser("user@test.com");
         UUID docId = UUID.randomUUID();
 
-        when(userRepository.findByEmail("driver@test.com")).thenReturn(Optional.of(driver));
+        when(userRepository.findByEmail("user@test.com")).thenReturn(Optional.of(user));
         when(documentRepository.findById(docId)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> documentService.getFile(docId, "driver@test.com"))
+        assertThatThrownBy(() -> documentService.getFile(docId, "user@test.com"))
                 .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessageContaining(docId.toString());
     }
 
     @Test
-    void getFile_shouldThrowAccessDeniedException_whenDocumentBelongsToAnotherDriver() {
-        Driver driver = buildDriver("driver@test.com");
-        Driver otherDriver = buildDriver("other@test.com");
+    void getFile_shouldThrowAccessDeniedException_whenDocumentBelongsToAnotherUser() {
+        User user = buildUser("user@test.com");
+        User otherUser = buildUser("other@test.com");
+        DriverApplication otherApp = buildDriverApplication(otherUser);
         UUID docId = UUID.randomUUID();
-        DriverDocument doc = buildDocument(otherDriver, DocumentType.LICENSE, null);
+        DriverDocument doc = buildDocument(otherApp, DocumentType.LICENSE, null);
         doc.setId(docId);
 
-        when(userRepository.findByEmail("driver@test.com")).thenReturn(Optional.of(driver));
+        when(userRepository.findByEmail("user@test.com")).thenReturn(Optional.of(user));
         when(documentRepository.findById(docId)).thenReturn(Optional.of(doc));
 
-        assertThatThrownBy(() -> documentService.getFile(docId, "driver@test.com"))
+        assertThatThrownBy(() -> documentService.getFile(docId, "user@test.com"))
                 .isInstanceOf(AccessDeniedException.class);
     }
 
     // --- helpers ---
 
-    private Driver buildDriver(String email) {
-        Driver d = new Driver();
-        d.setId(UUID.randomUUID());
-        d.setEmail(email);
-        d.setPasswordHash("hashed");
-        d.setFirstName("Jean");
-        d.setLastName("Dupont");
-        d.setIsActive(true);
-        d.setLicenseVerified(false);
-        d.setTotalTripsDriven(0);
-        return d;
+    private User buildUser(String email) {
+        return User.builder()
+                .id(UUID.randomUUID())
+                .email(email)
+                .passwordHash("hashed")
+                .firstName("Jean")
+                .lastName("Dupont")
+                .isActive(true)
+                .build();
     }
 
-    private Passenger buildPassenger(String email) {
-        Passenger p = new Passenger();
-        p.setId(UUID.randomUUID());
-        p.setEmail(email);
-        p.setPasswordHash("hashed");
-        p.setFirstName("Alice");
-        p.setLastName("Martin");
-        p.setIsActive(true);
-        p.setTotalTripsDone(0);
-        return p;
+    private DriverProfile buildDriverProfile(User user) {
+        return DriverProfile.builder()
+                .userId(user.getId())
+                .user(user)
+                .avgRating(BigDecimal.ZERO)
+                .totalTripsDriven(0)
+                .build();
     }
 
-    private Car buildCar(UUID id, Driver driver) {
+    private DriverApplication buildDriverApplication(User user) {
+        DriverApplication app = new DriverApplication();
+        app.setId(UUID.randomUUID());
+        app.setUser(user);
+        app.setStatus(ApplicationStatus.PENDING);
+        return app;
+    }
+
+    private Car buildCar(UUID id, DriverProfile driverProfile) {
         Car car = new Car();
         car.setId(id);
-        car.setDriver(driver);
+        car.setDriver(driverProfile);
         car.setBrand("Renault");
         car.setModel("Clio");
         car.setColor("Blue");
@@ -323,10 +367,10 @@ class DocumentServiceTest {
         return car;
     }
 
-    private DriverDocument buildDocument(Driver driver, DocumentType type, Car car) {
+    private DriverDocument buildDocument(DriverApplication app, DocumentType type, Car car) {
         DriverDocument doc = new DriverDocument();
         doc.setId(UUID.randomUUID());
-        doc.setDriver(driver);
+        doc.setApplication(app);
         doc.setCar(car);
         doc.setType(type);
         doc.setFilePath(tempDir.resolve("dummy.jpg").toString());

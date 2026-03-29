@@ -36,6 +36,6 @@ public interface ReservationRepository extends JpaRepository<Reservation, UUID> 
     /** Admin stats: count reservations by status (UC-A11). */
     long countByStatus(ReservationStatus status);
 
-    /** Role-change guard: checks whether a passenger has any reservations. */
+    /** Role-change guard: checks whether a user has any reservations as passenger. */
     boolean existsByPassenger_Id(UUID passengerId);
 }

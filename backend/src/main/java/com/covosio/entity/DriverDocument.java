@@ -1,22 +1,14 @@
 package com.covosio.entity;
 
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Entity
 @Table(name = "driver_documents")
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-@Builder
+@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class DriverDocument {
 
     @Id
@@ -24,11 +16,12 @@ public class DriverDocument {
     @Column(updatable = false, nullable = false)
     private UUID id;
 
+    /** Set for LICENSE documents submitted as part of a driver application. */
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "driver_id", nullable = false)
-    private Driver driver;
+    @JoinColumn(name = "application_id")
+    private DriverApplication application;
 
-    /** Linked car — only set for CAR_REGISTRATION documents. */
+    /** Set for CAR_REGISTRATION documents submitted by an existing driver. */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "car_id")
     private Car car;
@@ -65,8 +58,6 @@ public class DriverDocument {
 
     @PrePersist
     protected void onCreate() {
-        if (uploadedAt == null) {
-            uploadedAt = LocalDateTime.now();
-        }
+        if (uploadedAt == null) uploadedAt = LocalDateTime.now();
     }
 }

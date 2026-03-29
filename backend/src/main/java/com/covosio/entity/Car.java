@@ -26,7 +26,7 @@ public class Car {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "driver_id", nullable = false)
-    private Driver driver;
+    private DriverProfile driver;
 
     @Column(nullable = false, length = 100)
     private String brand;

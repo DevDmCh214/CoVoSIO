@@ -58,8 +58,8 @@ public class AdminController {
 
     @Operation(
         summary = "Change a user's role (UC-A03–A05)",
-        description = "Restructures the TPT sub-tables to assign the user a new role "
-                    + "(PASSENGER, DRIVER, or ADMIN).")
+        description = "Creates or removes profile rows to assign the user PASSENGER or DRIVER role. "
+                    + "Admin accounts are managed separately.")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Role updated"),
         @ApiResponse(responseCode = "400", description = "Invalid role value"),
@@ -206,12 +206,12 @@ public class AdminController {
     }
 
     @Operation(
-        summary = "Approve or reject a document (UC-A14)",
-        description = "Sets the document status. APPROVED: sets licenseVerified/registrationVerified (R08). "
-                    + "REJECTED: rejectionReason is mandatory.")
+        summary = "Approve or reject a CAR_REGISTRATION document (UC-A14)",
+        description = "Reviews a car registration document. APPROVED sets registrationVerified=true (R08). "
+                    + "For LICENSE documents (driver promotion) use PUT /admin/applications/{id}/review.")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Document reviewed"),
-        @ApiResponse(responseCode = "400", description = "Already reviewed or missing rejection reason"),
+        @ApiResponse(responseCode = "400", description = "Already reviewed, missing rejection reason, or wrong document type"),
         @ApiResponse(responseCode = "404", description = "Document not found")
     })
     @PutMapping("/documents/{id}/review")
@@ -221,6 +221,39 @@ public class AdminController {
             @AuthenticationPrincipal UserDetails principal) {
         return ResponseEntity.ok(
                 adminService.reviewDocument(id, request, principal.getUsername()));
+    }
+
+    // -----------------------------------------------------------------------
+    // Driver applications (promotion flow)
+    // -----------------------------------------------------------------------
+
+    @Operation(
+        summary = "List driver applications",
+        description = "Returns paginated driver applications. Optional ?status=PENDING|APPROVED|REJECTED filter.")
+    @ApiResponse(responseCode = "200", description = "Page of applications")
+    @GetMapping("/applications")
+    public ResponseEntity<Page<DriverApplicationResponse>> getApplications(
+            @Parameter(description = "Status filter (optional)") @RequestParam(required = false) String status,
+            @PageableDefault(size = 10, sort = "appliedAt") Pageable pageable) {
+        return ResponseEntity.ok(adminService.getApplications(status, pageable));
+    }
+
+    @Operation(
+        summary = "Approve or reject a driver application",
+        description = "APPROVED: creates a driver_profiles row — user gains ROLE_DRIVER on next login. "
+                    + "REJECTED: rejectionReason is mandatory.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Application reviewed"),
+        @ApiResponse(responseCode = "400", description = "Already reviewed or missing rejection reason"),
+        @ApiResponse(responseCode = "404", description = "Application not found")
+    })
+    @PutMapping("/applications/{id}/review")
+    public ResponseEntity<DriverApplicationResponse> reviewApplication(
+            @Parameter(description = "Application UUID") @PathVariable UUID id,
+            @Valid @RequestBody AdminApplicationReviewRequest request,
+            @AuthenticationPrincipal UserDetails principal) {
+        return ResponseEntity.ok(
+                adminService.reviewApplication(id, request, principal.getUsername()));
     }
 
     @Operation(

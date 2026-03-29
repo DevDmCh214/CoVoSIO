@@ -32,7 +32,7 @@
 | R05 | One review per reservation per direction |
 | R06 | Cancelling trip cascade-cancels all reservations |
 | R07 | Trip with CONFIRMED reservations: only `originLabel` editable |
-| R08 | Publishing trip requires `licenseVerified=true` AND car `registrationVerified=true` |
+| R08 | Publishing trip requires `licenseVerified=true` AND car `registrationVerified=true`. Approving a LICENSE doc for a PASSENGER atomically promotes them to DRIVER. |
 | R09 | Deleting car blocked if future AVAILABLE trip uses it |
 | R10 | Refresh token stored & revocable server-side |
 | R11 | Account suspension revokes all refresh tokens |
@@ -122,9 +122,13 @@
 
 ---
 
-## DOCUMENTS (ROLE_DRIVER)
+## DOCUMENTS (ROLE_PASSENGER or ROLE_DRIVER)
 
 **DocumentResponse:** `{id, type, mimeType, status, rejectionReason, carId, uploadedAt, reviewedAt}`
+
+**Upload rules:**
+- `LICENSE` — allowed for `ROLE_PASSENGER` and `ROLE_DRIVER` (driver-promotion flow)
+- `CAR_REGISTRATION` — `ROLE_DRIVER` only; `carId` required
 
 | Method | Path | Body/Notes | Returns | Errors |
 |--------|------|-----------|---------|--------|
@@ -169,7 +173,7 @@
 | Method | Path | Notes | Returns | Errors |
 |--------|------|-------|---------|--------|
 | GET | `/admin/documents` | Query: `status?(PENDING\|APPROVED\|REJECTED)` + pagination. Response includes `driverId/FirstName/LastName` | 200 Page\<DocumentResponse\> | 400 |
-| PUT | `/admin/documents/{id}/review` | `{status:APPROVED\|REJECTED, rejectionReason?(required if REJECTED)}` APPROVED LICENSE→`licenseVerified=true`; APPROVED CAR_REGISTRATION→`registrationVerified=true` (R08) | 200 DocumentResponse | 400 404 |
+| PUT | `/admin/documents/{id}/review` | `{status:APPROVED\|REJECTED, rejectionReason?(required if REJECTED)}` APPROVED LICENSE (PASSENGER uploader) → promotes to DRIVER + `licenseVerified=true` (R08); APPROVED LICENSE (DRIVER uploader) → `licenseVerified=true`; APPROVED CAR_REGISTRATION → `registrationVerified=true` | 200 DocumentResponse | 400 404 |
 | POST | `/admin/documents/{id}/notify` | Re-notify driver (no body) | 200 | 404 |
 
 ### Statistics

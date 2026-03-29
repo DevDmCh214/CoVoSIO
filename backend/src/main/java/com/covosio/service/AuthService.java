@@ -4,11 +4,14 @@ import com.covosio.dto.AuthResponse;
 import com.covosio.dto.LoginRequest;
 import com.covosio.dto.RefreshTokenRequest;
 import com.covosio.dto.RegisterRequest;
-import com.covosio.entity.Passenger;
+import com.covosio.entity.PassengerProfile;
 import com.covosio.entity.RefreshToken;
 import com.covosio.entity.User;
 import com.covosio.exception.BusinessException;
 import com.covosio.exception.ResourceNotFoundException;
+import com.covosio.repository.AdminRepository;
+import com.covosio.repository.DriverProfileRepository;
+import com.covosio.repository.PassengerProfileRepository;
 import com.covosio.repository.RefreshTokenRepository;
 import com.covosio.repository.UserRepository;
 import com.covosio.security.JwtUtil;
@@ -36,6 +39,9 @@ import java.util.UUID;
 public class AuthService {
 
     private final UserRepository userRepository;
+    private final AdminRepository adminRepository;
+    private final DriverProfileRepository driverProfileRepository;
+    private final PassengerProfileRepository passengerProfileRepository;
     private final RefreshTokenRepository refreshTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
@@ -48,6 +54,7 @@ public class AuthService {
     /**
      * Registers a new user as a Passenger (UC-C01).
      * Email uniqueness is checked before persisting.
+     * A PassengerProfile is created alongside the User.
      *
      * @param request registration payload (email, password, name, phone)
      * @return AuthResponse with access + refresh tokens
@@ -55,27 +62,29 @@ public class AuthService {
      */
     @Transactional
     public AuthResponse register(RegisterRequest request) {
-        if (userRepository.existsByEmail(request.getEmail())) {
+        if (userRepository.existsByEmail(request.getEmail())
+                || adminRepository.existsByEmail(request.getEmail())) {
             throw new BusinessException("Email already in use: " + request.getEmail());
         }
 
-        Passenger passenger = Passenger.builder()
+        User user = User.builder()
                 .email(request.getEmail())
                 .passwordHash(passwordEncoder.encode(request.getPassword()))
                 .firstName(request.getFirstName())
                 .lastName(request.getLastName())
                 .phone(request.getPhone())
                 .isActive(true)
-                .totalTripsDone(0)
                 .build();
+        userRepository.save(user);
 
-        userRepository.save(passenger);
+        PassengerProfile profile = PassengerProfile.builder().user(user).build();
+        passengerProfileRepository.save(profile);
 
-        UserDetails userDetails = userDetailsService.loadUserByUsername(passenger.getEmail());
+        UserDetails userDetails = userDetailsService.loadUserByUsername(user.getEmail());
         String accessToken = jwtUtil.generateAccessToken(userDetails);
-        String refreshToken = createAndPersistRefreshToken(passenger);
+        String refreshToken = createAndPersistRefreshToken(user);
 
-        return buildAuthResponse(accessToken, refreshToken, passenger, "PASSENGER");
+        return buildAuthResponse(accessToken, refreshToken, user, "PASSENGER");
     }
 
     /**
@@ -96,19 +105,38 @@ public class AuthService {
             throw new BusinessException("Invalid email or password");
         }
 
-        User user = userRepository.findByEmail(request.getEmail())
-                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + request.getEmail()));
-
-        if (!user.getIsActive()) {
-            throw new BusinessException("Account is suspended");
+        // Admin login — checked first; admins have no refresh token (stateless)
+        var adminOpt = adminRepository.findByEmail(request.getEmail());
+        if (adminOpt.isPresent()) {
+            var admin = adminOpt.get();
+            UserDetails userDetails = userDetailsService.loadUserByUsername(admin.getEmail());
+            String accessToken = jwtUtil.generateAccessToken(userDetails);
+            return AuthResponse.builder()
+                    .accessToken(accessToken)
+                    .refreshToken("")
+                    .tokenType("Bearer")
+                    .role("ADMIN")
+                    .email(admin.getEmail())
+                    .firstName(admin.getFirstName())
+                    .lastName(admin.getLastName())
+                    .build();
         }
 
-        UserDetails userDetails = userDetailsService.loadUserByUsername(user.getEmail());
-        String accessToken = jwtUtil.generateAccessToken(userDetails);
-        String refreshToken = createAndPersistRefreshToken(user);
-        String role = resolveRole(user);
+        // Platform user
+        var userOpt = userRepository.findByEmail(request.getEmail());
+        if (userOpt.isPresent()) {
+            User user = userOpt.get();
+            if (!user.getIsActive()) {
+                throw new BusinessException("Account is suspended");
+            }
+            UserDetails userDetails = userDetailsService.loadUserByUsername(user.getEmail());
+            String accessToken = jwtUtil.generateAccessToken(userDetails);
+            String refreshToken = createAndPersistRefreshToken(user);
+            String role = driverProfileRepository.existsByUserId(user.getId()) ? "DRIVER" : "PASSENGER";
+            return buildAuthResponse(accessToken, refreshToken, user, role);
+        }
 
-        return buildAuthResponse(accessToken, refreshToken, user, role);
+        throw new BusinessException("Invalid email or password");
     }
 
     /**
@@ -136,7 +164,7 @@ public class AuthService {
         User user = stored.getUser();
         UserDetails userDetails = userDetailsService.loadUserByUsername(user.getEmail());
         String newAccessToken = jwtUtil.generateAccessToken(userDetails);
-        String role = resolveRole(user);
+        String role = driverProfileRepository.existsByUserId(user.getId()) ? "DRIVER" : "PASSENGER";
 
         return buildAuthResponse(newAccessToken, stored.getToken(), user, role);
     }
@@ -179,14 +207,5 @@ public class AuthService {
                 .firstName(user.getFirstName())
                 .lastName(user.getLastName())
                 .build();
-    }
-
-    private String resolveRole(User user) {
-        return switch (user.getClass().getSimpleName()) {
-            case "Passenger" -> "PASSENGER";
-            case "Driver"    -> "DRIVER";
-            case "Admin"     -> "ADMIN";
-            default          -> "PASSENGER";
-        };
     }
 }

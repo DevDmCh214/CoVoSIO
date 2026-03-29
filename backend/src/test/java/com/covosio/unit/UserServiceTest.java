@@ -4,9 +4,10 @@ import com.covosio.dto.ChangePasswordRequest;
 import com.covosio.dto.PublicUserResponse;
 import com.covosio.dto.UpdateProfileRequest;
 import com.covosio.dto.UserProfileResponse;
-import com.covosio.entity.Passenger;
+import com.covosio.entity.User;
 import com.covosio.exception.BusinessException;
 import com.covosio.exception.ResourceNotFoundException;
+import com.covosio.repository.DriverProfileRepository;
 import com.covosio.repository.UserRepository;
 import com.covosio.service.UserService;
 import org.junit.jupiter.api.Test;
@@ -16,7 +17,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
-import java.math.BigDecimal;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -27,8 +27,9 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class UserServiceTest {
 
-    @Mock private UserRepository userRepository;
-    @Mock private PasswordEncoder passwordEncoder;
+    @Mock private UserRepository          userRepository;
+    @Mock private DriverProfileRepository driverProfileRepository;
+    @Mock private PasswordEncoder         passwordEncoder;
 
     @InjectMocks
     private UserService userService;
@@ -37,8 +38,8 @@ class UserServiceTest {
 
     @Test
     void getMyProfile_shouldReturnProfile_whenUserExists() {
-        Passenger passenger = buildPassenger("alice@test.com");
-        when(userRepository.findByEmail("alice@test.com")).thenReturn(Optional.of(passenger));
+        User user = buildUser("alice@test.com");
+        when(userRepository.findByEmail("alice@test.com")).thenReturn(Optional.of(user));
 
         UserProfileResponse response = userService.getMyProfile("alice@test.com");
 
@@ -60,8 +61,8 @@ class UserServiceTest {
 
     @Test
     void updateMyProfile_shouldUpdateFields_whenRequestIsValid() {
-        Passenger passenger = buildPassenger("alice@test.com");
-        when(userRepository.findByEmail("alice@test.com")).thenReturn(Optional.of(passenger));
+        User user = buildUser("alice@test.com");
+        when(userRepository.findByEmail("alice@test.com")).thenReturn(Optional.of(user));
         when(userRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         UpdateProfileRequest request = new UpdateProfileRequest("Bob", "Jones", "0611111111", null);
@@ -71,7 +72,7 @@ class UserServiceTest {
         assertThat(response.getFirstName()).isEqualTo("Bob");
         assertThat(response.getLastName()).isEqualTo("Jones");
         assertThat(response.getPhone()).isEqualTo("0611111111");
-        verify(userRepository).save(passenger);
+        verify(userRepository).save(user);
     }
 
     @Test
@@ -88,22 +89,22 @@ class UserServiceTest {
 
     @Test
     void changePassword_shouldUpdateHash_whenCurrentPasswordIsCorrect() {
-        Passenger passenger = buildPassenger("alice@test.com");
-        when(userRepository.findByEmail("alice@test.com")).thenReturn(Optional.of(passenger));
+        User user = buildUser("alice@test.com");
+        when(userRepository.findByEmail("alice@test.com")).thenReturn(Optional.of(user));
         when(passwordEncoder.matches("oldpass", "hashed")).thenReturn(true);
         when(passwordEncoder.encode("newpass123")).thenReturn("new-hashed");
         when(userRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         userService.changePassword("alice@test.com", new ChangePasswordRequest("oldpass", "newpass123"));
 
-        assertThat(passenger.getPasswordHash()).isEqualTo("new-hashed");
-        verify(userRepository).save(passenger);
+        assertThat(user.getPasswordHash()).isEqualTo("new-hashed");
+        verify(userRepository).save(user);
     }
 
     @Test
     void changePassword_shouldThrowBusinessException_whenCurrentPasswordIsWrong() {
-        Passenger passenger = buildPassenger("alice@test.com");
-        when(userRepository.findByEmail("alice@test.com")).thenReturn(Optional.of(passenger));
+        User user = buildUser("alice@test.com");
+        when(userRepository.findByEmail("alice@test.com")).thenReturn(Optional.of(user));
         when(passwordEncoder.matches("wrongpass", "hashed")).thenReturn(false);
 
         assertThatThrownBy(() -> userService.changePassword("alice@test.com",
@@ -126,8 +127,8 @@ class UserServiceTest {
     @Test
     void getPublicProfile_shouldReturnPublicFields_whenUserExists() {
         UUID userId = UUID.randomUUID();
-        Passenger passenger = buildPassenger("alice@test.com");
-        when(userRepository.findById(userId)).thenReturn(Optional.of(passenger));
+        User user = buildUser("alice@test.com");
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
 
         PublicUserResponse response = userService.getPublicProfile(userId);
 
@@ -152,16 +153,15 @@ class UserServiceTest {
 
     // --- helpers ---
 
-    private Passenger buildPassenger(String email) {
-        Passenger p = new Passenger();
-        p.setEmail(email);
-        p.setPasswordHash("hashed");
-        p.setFirstName("Alice");
-        p.setLastName("Smith");
-        p.setPhone("0600000000");
-        p.setIsActive(true);
-        p.setAvgRating(BigDecimal.ZERO);
-        p.setTotalTripsDone(0);
-        return p;
+    private User buildUser(String email) {
+        return User.builder()
+                .id(UUID.randomUUID())
+                .email(email)
+                .passwordHash("hashed")
+                .firstName("Alice")
+                .lastName("Smith")
+                .phone("0600000000")
+                .isActive(true)
+                .build();
     }
 }

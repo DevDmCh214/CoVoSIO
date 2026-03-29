@@ -86,7 +86,7 @@ Controller → Service → Repository → Entity
 | R05 | One review per reservation, per direction |
 | R06 | Cancelling a trip cancels all its reservations in cascade |
 | R07 | Editing a trip with reservations: only meeting point is editable |
-| R08 | Publishing a trip requires `license_verified = true` AND car verified |
+| R08 | Publishing a trip requires `license_verified = true` AND car verified. Approving a LICENSE document for a PASSENGER atomically promotes them to DRIVER (inserts drivers row, updates dtype). |
 | R09 | Deleting a car blocked if future `AVAILABLE` trip is attached |
 | R10 | Refresh token revocable in database |
 | R11 | Account suspension invalidates all its refresh tokens |
@@ -413,7 +413,7 @@ Branch `feature/documents` → merged into `develop`.
 | Migration | `V3__init_documents.sql` — table `driver_documents` |
 | Security | `/documents`, `/users/me/documents/**` → `ROLE_DRIVER` in `SecurityConfig` |
 | Config | `app.upload-dir` added to `application.yml` and `application-test.yml` |
-| Note | Magic signature detection (JPEG/PNG/PDF). Files stored at `{uploadDir}/documents/{driverId}/{uuid}.ext`. Admin review (Phase 6). |
+| Note | Magic signature detection (JPEG/PNG/PDF). Files stored at `{uploadDir}/documents/{userId}/{uuid}.ext`. LICENSE upload open to PASSENGER + DRIVER (promotion flow); CAR_REGISTRATION requires DRIVER. Admin review triggers PASSENGER→DRIVER promotion on LICENSE approval (V12). |
 
 #### Phase 5 — Trip management (UC-D04 to UC-D07, UC-P01, UC-P02, UC-P07, UC-D10) ✅
 Branch `feature/trips` → merged into `develop`.
@@ -508,8 +508,8 @@ main     ← not yet updated (nothing promoted to main yet)
 
 ### 9.5 Flyway Migration Counter
 
-Last migration: **V10** (`V10__fix_seed_dtype_and_passwords.sql`).
-Next migration to create: **V11**.
+Last migration: **V12** (`V12__driver_promotion_fk.sql`).
+Next migration to create: **V13**.
 
 Seed migrations V8–V10 insert mock data for all entity types and endpoint testing.
 See section 9.6 for test accounts.
@@ -539,3 +539,4 @@ Two bugs found when running against real PostgreSQL (H2 tests were passing):
    - Using `CAST(:x AS string)` for optional string filters
    - Passing sentinel dates `LocalDateTime.of(1970,1,1,0,0)` / `LocalDateTime.of(2100,1,1,0,0)` instead of null in `TripService`
 3. **`AuthService` suspended user login** — `LockedException` from `authenticationManager.authenticate()` was uncaught → 500. Fixed by catching `LockedException` alongside `BadCredentialsException`.
+

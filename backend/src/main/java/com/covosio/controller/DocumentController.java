@@ -25,7 +25,7 @@ import java.util.UUID;
 
 @RestController
 @RequiredArgsConstructor
-@Tag(name = "Documents", description = "UC-D11, UC-D12 — driver document upload and status")
+@Tag(name = "Documents", description = "UC-D11, UC-D12 — document upload (any user for LICENSE, driver-only for CAR_REGISTRATION) and status")
 public class DocumentController {
 
     private final DocumentService documentService;
@@ -36,11 +36,11 @@ public class DocumentController {
     @ApiResponses({
         @ApiResponse(responseCode = "201", description = "Document uploaded"),
         @ApiResponse(responseCode = "400", description = "Validation error (size, type, signature)"),
-        @ApiResponse(responseCode = "403", description = "Not a driver"),
+        @ApiResponse(responseCode = "403", description = "CAR_REGISTRATION attempted by a non-driver"),
         @ApiResponse(responseCode = "404", description = "Car not found (CAR_REGISTRATION)")
     })
     @PostMapping(value = "/documents", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("hasRole('DRIVER')")
+    @PreAuthorize("hasAnyRole('DRIVER', 'PASSENGER')")
     public ResponseEntity<DocumentResponse> upload(
             @AuthenticationPrincipal UserDetails principal,
             @Parameter(description = "File to upload (JPEG, PNG, or PDF — max 5 MB)")
@@ -57,10 +57,10 @@ public class DocumentController {
                description = "Returns all documents uploaded by the authenticated driver, newest first.")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Document list returned"),
-        @ApiResponse(responseCode = "403", description = "Not a driver")
+        @ApiResponse(responseCode = "403", description = "Not authenticated")
     })
     @GetMapping("/users/me/documents")
-    @PreAuthorize("hasRole('DRIVER')")
+    @PreAuthorize("hasAnyRole('DRIVER', 'PASSENGER')")
     public ResponseEntity<List<DocumentResponse>> getMyDocuments(
             @AuthenticationPrincipal UserDetails principal) {
         return ResponseEntity.ok(documentService.getMyDocuments(principal.getUsername()));
@@ -71,11 +71,11 @@ public class DocumentController {
                              "Requires JWT — file is never served directly from disk.")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "File returned"),
-        @ApiResponse(responseCode = "403", description = "Not the document owner or not a driver"),
+        @ApiResponse(responseCode = "403", description = "Not the document owner"),
         @ApiResponse(responseCode = "404", description = "Document not found")
     })
     @GetMapping("/users/me/documents/{id}/file")
-    @PreAuthorize("hasRole('DRIVER')")
+    @PreAuthorize("hasAnyRole('DRIVER', 'PASSENGER')")
     public ResponseEntity<org.springframework.core.io.Resource> getFile(
             @AuthenticationPrincipal UserDetails principal,
             @Parameter(description = "Document UUID") @PathVariable UUID id) {

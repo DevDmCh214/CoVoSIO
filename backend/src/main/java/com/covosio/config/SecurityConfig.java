@@ -51,9 +51,9 @@ public class SecurityConfig {
                 .requestMatchers("/admin/**").hasRole("ADMIN")
                 // Car endpoints — drivers only (UC-D01, UC-D01b)
                 .requestMatchers("/cars", "/cars/**").hasRole("DRIVER")
-                // Document endpoints — drivers only (UC-D11, UC-D12)
-                .requestMatchers("/documents").hasRole("DRIVER")
-                .requestMatchers("/users/me/documents", "/users/me/documents/**").hasRole("DRIVER")
+                // Document endpoints — any authenticated user for LICENSE upload; CAR_REGISTRATION enforced in service
+                .requestMatchers("/documents").hasAnyRole("DRIVER", "PASSENGER")
+                .requestMatchers("/users/me/documents", "/users/me/documents/**").hasAnyRole("DRIVER", "PASSENGER")
                 // Review endpoint — any authenticated user (passengers UC-P06, drivers UC-D09)
                 .requestMatchers(HttpMethod.POST, "/reservations/*/review").authenticated()
                 // Reservation endpoints — passengers only (UC-P03, UC-P04, UC-P05)
@@ -66,7 +66,8 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.PUT,    "/trips/**").hasRole("DRIVER")
                 .requestMatchers(HttpMethod.DELETE, "/trips/**").hasRole("DRIVER")
                 .requestMatchers(HttpMethod.GET,    "/trips/me", "/trips/map/me").hasRole("DRIVER")
-                .requestMatchers(HttpMethod.GET,    "/trips", "/trips/**").authenticated()
+                .requestMatchers(HttpMethod.GET,    "/trips", "/trips/map").permitAll()
+                .requestMatchers(HttpMethod.GET,    "/trips/**").authenticated()
                 // All other endpoints require authentication
                 .anyRequest().authenticated()
             )

@@ -5,6 +5,8 @@ import com.covosio.dto.ReviewResponse;
 import com.covosio.entity.*;
 import com.covosio.exception.BusinessException;
 import com.covosio.exception.ResourceNotFoundException;
+import com.covosio.repository.DriverProfileRepository;
+import com.covosio.repository.PassengerProfileRepository;
 import com.covosio.repository.ReservationRepository;
 import com.covosio.repository.ReviewRepository;
 import com.covosio.repository.UserRepository;
@@ -25,16 +27,18 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class ReviewService {
 
-    private final ReviewRepository      reviewRepository;
-    private final ReservationRepository reservationRepository;
-    private final UserRepository        userRepository;
+    private final ReviewRepository         reviewRepository;
+    private final ReservationRepository    reservationRepository;
+    private final UserRepository           userRepository;
+    private final DriverProfileRepository  driverProfileRepository;
+    private final PassengerProfileRepository passengerProfileRepository;
 
     /**
      * Submits a review for a completed trip reservation (UC-P06, UC-D09).
      * The review direction (PASSENGER_TO_DRIVER or DRIVER_TO_PASSENGER) is inferred
-     * from the authenticated user's role.
+     * from whether the author has a DriverProfile and is the trip's driver.
      * Enforces R04 (trip must be COMPLETED) and R05 (one review per direction per reservation).
-     * Recalculates the driver's avg_rating after a PASSENGER_TO_DRIVER review.
+     * Recalculates the target's avg_rating after each review.
      *
      * @param authorEmail   authenticated user's email (passenger or driver)
      * @param reservationId UUID of the reservation being reviewed
@@ -59,26 +63,23 @@ public class ReviewService {
                     "Reviews can only be submitted after the trip is completed (R04)");
         }
 
-        // Determine direction and target based on the caller's type
+        // Determine direction and target based on the caller's role
         ReviewDirection direction;
         User target;
 
-        if (author instanceof Passenger passenger) {
-            if (!reservation.getPassenger().getId().equals(passenger.getId())) {
-                throw new AccessDeniedException("Action not authorized");
-            }
-            direction = ReviewDirection.PASSENGER_TO_DRIVER;
-            target    = trip.getDriver();
+        boolean isDriver = driverProfileRepository.existsByUserId(author.getId())
+                && trip.getDriver().getUserId().equals(author.getId());
 
-        } else if (author instanceof Driver driver) {
-            if (!trip.getDriver().getId().equals(driver.getId())) {
-                throw new AccessDeniedException("Action not authorized");
-            }
+        if (isDriver) {
+            // Driver reviewing the passenger
             direction = ReviewDirection.DRIVER_TO_PASSENGER;
             target    = reservation.getPassenger();
-
+        } else if (reservation.getPassenger().getId().equals(author.getId())) {
+            // Passenger reviewing the driver
+            direction = ReviewDirection.PASSENGER_TO_DRIVER;
+            target    = trip.getDriver().getUser();
         } else {
-            throw new AccessDeniedException("Only passengers and drivers can submit reviews");
+            throw new AccessDeniedException("Action not authorized");
         }
 
         // R05 — one review per reservation per direction
@@ -98,10 +99,11 @@ public class ReviewService {
 
         Review saved = reviewRepository.save(review);
 
-        // Recalculate driver's avg_rating after a passenger-to-driver review
-        // When direction is PASSENGER_TO_DRIVER, target is the driver
+        // Recalculate target's avg_rating
         if (direction == ReviewDirection.PASSENGER_TO_DRIVER) {
-            recalculateDriverRating((Driver) target);
+            recalculateDriverRating(target);
+        } else {
+            recalculatePassengerRating(target);
         }
 
         return toResponse(saved);
@@ -113,11 +115,24 @@ public class ReviewService {
      * Recomputes the driver's average rating from all reviews they have received
      * and persists the updated value.
      */
-    private void recalculateDriverRating(Driver driver) {
-        double newAvg = reviewRepository.findAverageRatingByTargetId(driver.getId())
-                .orElse(0.0);
-        driver.setAvgRating(BigDecimal.valueOf(newAvg).setScale(2, RoundingMode.HALF_UP));
-        userRepository.save(driver);
+    private void recalculateDriverRating(User driverUser) {
+        driverProfileRepository.findByUserId(driverUser.getId()).ifPresent(dp -> {
+            double newAvg = reviewRepository.findAverageRatingByTargetId(driverUser.getId()).orElse(0.0);
+            dp.setAvgRating(BigDecimal.valueOf(newAvg).setScale(2, RoundingMode.HALF_UP));
+            driverProfileRepository.save(dp);
+        });
+    }
+
+    /**
+     * Recomputes the passenger's average rating from all reviews they have received
+     * and persists the updated value.
+     */
+    private void recalculatePassengerRating(User passengerUser) {
+        passengerProfileRepository.findByUserId(passengerUser.getId()).ifPresent(pp -> {
+            double newAvg = reviewRepository.findAverageRatingByTargetId(passengerUser.getId()).orElse(0.0);
+            pp.setAvgRating(BigDecimal.valueOf(newAvg).setScale(2, RoundingMode.HALF_UP));
+            passengerProfileRepository.save(pp);
+        });
     }
 
     private ReviewResponse toResponse(Review r) {

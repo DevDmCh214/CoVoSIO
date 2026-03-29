@@ -5,6 +5,7 @@ import com.covosio.dto.ReservationResponse;
 import com.covosio.entity.*;
 import com.covosio.exception.BusinessException;
 import com.covosio.exception.ResourceNotFoundException;
+import com.covosio.repository.DriverProfileRepository;
 import com.covosio.repository.ReservationRepository;
 import com.covosio.repository.TripRepository;
 import com.covosio.repository.UserRepository;
@@ -29,28 +30,29 @@ public class ReservationService {
     private final ReservationRepository reservationRepository;
     private final TripRepository        tripRepository;
     private final UserRepository        userRepository;
+    private final DriverProfileRepository driverProfileRepository;
 
     /**
-     * Creates a reservation for the authenticated passenger (UC-P03).
+     * Creates a reservation for the authenticated user (UC-P03).
      * Enforces R01 (no self-booking) and R02 (seat availability, atomic decrement).
      *
-     * @param passengerEmail authenticated passenger's email
+     * @param passengerEmail authenticated user's email
      * @param request        reservation payload (tripId, seatsBooked)
      * @return ReservationResponse for the newly created reservation
      * @throws ResourceNotFoundException if trip not found
-     * @throws AccessDeniedException     if user is not a passenger
+     * @throws AccessDeniedException     if user not found
      * @throws BusinessException         if R01 or R02 is violated, or trip is not AVAILABLE
      */
     @Transactional
     public ReservationResponse createReservation(String passengerEmail, ReservationRequest request) {
-        Passenger passenger = loadPassenger(passengerEmail);
+        User passenger = loadUser(passengerEmail);
 
         // Pessimistic write lock ensures R02 is atomic across concurrent requests
         Trip trip = tripRepository.findByIdForUpdate(request.getTripId())
                 .orElseThrow(() -> new ResourceNotFoundException("Trip not found: " + request.getTripId()));
 
         // R01 — passenger cannot book their own trip
-        if (trip.getDriver().getId().equals(passenger.getId())) {
+        if (trip.getDriver().getUserId().equals(passenger.getId())) {
             throw new BusinessException("You cannot book your own trip (R01)");
         }
 
@@ -79,19 +81,19 @@ public class ReservationService {
     }
 
     /**
-     * Cancels a reservation belonging to the authenticated passenger (UC-P04).
+     * Cancels a reservation belonging to the authenticated user (UC-P04).
      * Enforces R03: cancellation is blocked within 2 hours of departure.
      * Restores the seats to the trip on successful cancellation.
      *
-     * @param passengerEmail  authenticated passenger's email
+     * @param passengerEmail  authenticated user's email
      * @param reservationId   UUID of the reservation to cancel
      * @throws ResourceNotFoundException if reservation not found
-     * @throws AccessDeniedException     if passenger does not own the reservation, or user is not a passenger
+     * @throws AccessDeniedException     if user does not own the reservation
      * @throws BusinessException         if reservation is already cancelled, or R03 is violated
      */
     @Transactional
     public void cancelReservation(String passengerEmail, UUID reservationId) {
-        Passenger passenger = loadPassenger(passengerEmail);
+        User passenger = loadUser(passengerEmail);
 
         Reservation reservation = reservationRepository.findById(reservationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Reservation not found: " + reservationId));
@@ -120,16 +122,15 @@ public class ReservationService {
     }
 
     /**
-     * Returns the authenticated passenger's reservations, newest first (UC-P05).
+     * Returns the authenticated user's reservations, newest first (UC-P05).
      *
-     * @param passengerEmail authenticated passenger's email
+     * @param passengerEmail authenticated user's email
      * @param pageable       pagination
-     * @return paginated page of the passenger's reservations
-     * @throws AccessDeniedException if user is not a passenger
+     * @return paginated page of the user's reservations
      */
     @Transactional(readOnly = true)
     public Page<ReservationResponse> getMyReservations(String passengerEmail, Pageable pageable) {
-        Passenger passenger = loadPassenger(passengerEmail);
+        User passenger = loadUser(passengerEmail);
         return reservationRepository
                 .findByPassenger_IdOrderByCreatedAtDesc(passenger.getId(), pageable)
                 .map(this::toResponse);
@@ -149,14 +150,14 @@ public class ReservationService {
     public Page<ReservationResponse> getTripReservations(String driverEmail, UUID tripId, Pageable pageable) {
         User user = userRepository.findByEmail(driverEmail)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + driverEmail));
-        if (!(user instanceof Driver driver)) {
-            throw new AccessDeniedException("Only drivers can view trip reservations");
-        }
+
+        DriverProfile driverProfile = driverProfileRepository.findByUserId(user.getId())
+                .orElseThrow(() -> new AccessDeniedException("Only drivers can view trip reservations"));
 
         Trip trip = tripRepository.findById(tripId)
                 .orElseThrow(() -> new ResourceNotFoundException("Trip not found: " + tripId));
 
-        if (!trip.getDriver().getId().equals(driver.getId())) {
+        if (!trip.getDriver().getUserId().equals(driverProfile.getUserId())) {
             throw new AccessDeniedException("Action not authorized");
         }
 
@@ -167,13 +168,9 @@ public class ReservationService {
 
     // --- helpers ---
 
-    private Passenger loadPassenger(String email) {
-        User user = userRepository.findByEmail(email)
+    private User loadUser(String email) {
+        return userRepository.findByEmail(email)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + email));
-        if (!(user instanceof Passenger passenger)) {
-            throw new AccessDeniedException("Only passengers can manage reservations");
-        }
-        return passenger;
     }
 
     private ReservationResponse toResponse(Reservation r) {

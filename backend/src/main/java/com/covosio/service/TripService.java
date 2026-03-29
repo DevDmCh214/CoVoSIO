@@ -7,6 +7,7 @@ import com.covosio.entity.*;
 import com.covosio.exception.BusinessException;
 import com.covosio.exception.ResourceNotFoundException;
 import com.covosio.repository.CarRepository;
+import com.covosio.repository.DriverProfileRepository;
 import com.covosio.repository.ReservationRepository;
 import com.covosio.repository.TripRepository;
 import com.covosio.repository.UserRepository;
@@ -33,39 +34,38 @@ public class TripService {
     private final ReservationRepository reservationRepository;
     private final UserRepository        userRepository;
     private final CarRepository         carRepository;
+    private final DriverProfileRepository driverProfileRepository;
 
     /**
      * Publishes a new trip for the authenticated driver (UC-D04).
-     * Enforces R08: requires licenseVerified = true AND car registrationVerified = true.
+     * Enforces R08: requires car registrationVerified = true.
+     * (License is verified implicitly — DriverProfile existence means license was approved.)
      *
      * @param driverEmail authenticated driver's email
      * @param request     trip creation payload
      * @return TripResponse for the newly created trip
      * @throws ResourceNotFoundException if driver or car is not found
      * @throws AccessDeniedException     if user is not a driver, or car belongs to another driver
-     * @throws BusinessException         if R08 is violated (unverified driver or car)
+     * @throws BusinessException         if R08 is violated (unverified car registration)
      */
     @Transactional
     public TripResponse createTrip(String driverEmail, TripRequest request) {
-        Driver driver = loadDriver(driverEmail);
+        DriverProfile driverProfile = loadDriverProfile(driverEmail);
 
         Car car = carRepository.findById(request.getCarId())
                 .orElseThrow(() -> new ResourceNotFoundException("Car not found: " + request.getCarId()));
 
-        if (!car.getDriver().getId().equals(driver.getId())) {
+        if (!car.getDriver().getUserId().equals(driverProfile.getUserId())) {
             throw new AccessDeniedException("Action not authorized");
         }
 
-        // R08 — both driver license and car registration must be verified
-        if (!driver.getLicenseVerified()) {
-            throw new BusinessException("Driver license must be verified before publishing a trip (R08)");
-        }
+        // R08 — car registration must be verified before publishing a trip
         if (!car.getRegistrationVerified()) {
             throw new BusinessException("Car registration must be verified before publishing a trip (R08)");
         }
 
         Trip trip = Trip.builder()
-                .driver(driver)
+                .driver(driverProfile)
                 .car(car)
                 .originLabel(request.getOriginLabel())
                 .originLat(request.getOriginLat())
@@ -129,11 +129,11 @@ public class TripService {
      */
     @Transactional
     public TripResponse updateTrip(UUID id, String driverEmail, TripRequest request) {
-        Driver driver = loadDriver(driverEmail);
+        DriverProfile driverProfile = loadDriverProfile(driverEmail);
         Trip trip = tripRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Trip not found: " + id));
 
-        if (!trip.getDriver().getId().equals(driver.getId())) {
+        if (!trip.getDriver().getUserId().equals(driverProfile.getUserId())) {
             throw new AccessDeniedException("Action not authorized");
         }
         if (trip.getStatus() != TripStatus.AVAILABLE) {
@@ -151,7 +151,7 @@ public class TripService {
         } else {
             Car car = carRepository.findById(request.getCarId())
                     .orElseThrow(() -> new ResourceNotFoundException("Car not found: " + request.getCarId()));
-            if (!car.getDriver().getId().equals(driver.getId())) {
+            if (!car.getDriver().getUserId().equals(driverProfile.getUserId())) {
                 throw new AccessDeniedException("Action not authorized");
             }
             trip.setCar(car);
@@ -183,11 +183,11 @@ public class TripService {
      */
     @Transactional
     public void cancelTrip(UUID id, String driverEmail) {
-        Driver driver = loadDriver(driverEmail);
+        DriverProfile driverProfile = loadDriverProfile(driverEmail);
         Trip trip = tripRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Trip not found: " + id));
 
-        if (!trip.getDriver().getId().equals(driver.getId())) {
+        if (!trip.getDriver().getUserId().equals(driverProfile.getUserId())) {
             throw new AccessDeniedException("Action not authorized");
         }
         if (trip.getStatus() == TripStatus.CANCELLED) {
@@ -210,8 +210,8 @@ public class TripService {
      */
     @Transactional(readOnly = true)
     public Page<TripResponse> getMyTrips(String driverEmail, Pageable pageable) {
-        Driver driver = loadDriver(driverEmail);
-        return tripRepository.findByDriver_IdOrderByDepartureAtDesc(driver.getId(), pageable)
+        DriverProfile driverProfile = loadDriverProfile(driverEmail);
+        return tripRepository.findByDriver_UserIdOrderByDepartureAtDesc(driverProfile.getUserId(), pageable)
                 .map(this::toResponse);
     }
 
@@ -236,28 +236,26 @@ public class TripService {
      */
     @Transactional(readOnly = true)
     public Page<TripMapResponse> getMyMapTrips(String driverEmail, Pageable pageable) {
-        Driver driver = loadDriver(driverEmail);
-        return tripRepository.findByDriver_Id(driver.getId(), pageable)
+        DriverProfile driverProfile = loadDriverProfile(driverEmail);
+        return tripRepository.findByDriver_UserId(driverProfile.getUserId(), pageable)
                 .map(this::toMapResponse);
     }
 
     // --- helpers ---
 
-    private Driver loadDriver(String email) {
+    private DriverProfile loadDriverProfile(String email) {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + email));
-        if (!(user instanceof Driver driver)) {
-            throw new AccessDeniedException("Only drivers can manage trips");
-        }
-        return driver;
+        return driverProfileRepository.findByUserId(user.getId())
+                .orElseThrow(() -> new AccessDeniedException("Only drivers can manage trips"));
     }
 
     private TripResponse toResponse(Trip t) {
         return TripResponse.builder()
                 .id(t.getId())
-                .driverId(t.getDriver().getId())
-                .driverFirstName(t.getDriver().getFirstName())
-                .driverLastName(t.getDriver().getLastName())
+                .driverId(t.getDriver().getUserId())
+                .driverFirstName(t.getDriver().getUser().getFirstName())
+                .driverLastName(t.getDriver().getUser().getLastName())
                 .driverAvgRating(t.getDriver().getAvgRating())
                 .carId(t.getCar()    != null ? t.getCar().getId()    : null)
                 .carBrand(t.getCar() != null ? t.getCar().getBrand() : null)

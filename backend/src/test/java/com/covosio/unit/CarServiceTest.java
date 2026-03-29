@@ -3,11 +3,12 @@ package com.covosio.unit;
 import com.covosio.dto.CarRequest;
 import com.covosio.dto.CarResponse;
 import com.covosio.entity.Car;
-import com.covosio.entity.Driver;
-import com.covosio.entity.Passenger;
+import com.covosio.entity.DriverProfile;
+import com.covosio.entity.User;
 import com.covosio.exception.BusinessException;
 import com.covosio.exception.ResourceNotFoundException;
 import com.covosio.repository.CarRepository;
+import com.covosio.repository.DriverProfileRepository;
 import com.covosio.repository.UserRepository;
 import com.covosio.service.CarService;
 import org.junit.jupiter.api.Test;
@@ -17,6 +18,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.access.AccessDeniedException;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -29,8 +31,9 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class CarServiceTest {
 
-    @Mock private CarRepository carRepository;
-    @Mock private UserRepository userRepository;
+    @Mock private CarRepository           carRepository;
+    @Mock private UserRepository          userRepository;
+    @Mock private DriverProfileRepository driverProfileRepository;
 
     @InjectMocks
     private CarService carService;
@@ -39,10 +42,12 @@ class CarServiceTest {
 
     @Test
     void addCar_shouldCreateCar_whenDriverIsValid() {
-        Driver driver = buildDriver("driver@test.com");
+        User user = buildUser("driver@test.com");
+        DriverProfile driverProfile = buildDriverProfile(user);
         CarRequest request = new CarRequest("Renault", "Clio", "Blue", "AB-123-CD", 4);
 
-        when(userRepository.findByEmail("driver@test.com")).thenReturn(Optional.of(driver));
+        when(userRepository.findByEmail("driver@test.com")).thenReturn(Optional.of(user));
+        when(driverProfileRepository.findByUserId(user.getId())).thenReturn(Optional.of(driverProfile));
         when(carRepository.save(any(Car.class))).thenAnswer(inv -> {
             Car c = inv.getArgument(0);
             c.setId(UUID.randomUUID());
@@ -72,8 +77,9 @@ class CarServiceTest {
 
     @Test
     void addCar_shouldThrowAccessDeniedException_whenUserIsNotDriver() {
-        Passenger passenger = buildPassenger("passenger@test.com");
-        when(userRepository.findByEmail("passenger@test.com")).thenReturn(Optional.of(passenger));
+        User user = buildUser("passenger@test.com");
+        when(userRepository.findByEmail("passenger@test.com")).thenReturn(Optional.of(user));
+        when(driverProfileRepository.findByUserId(user.getId())).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> carService.addCar("passenger@test.com",
                 new CarRequest("Renault", "Clio", "Blue", "XX-000-XX", 4)))
@@ -84,11 +90,13 @@ class CarServiceTest {
 
     @Test
     void deleteCar_shouldSoftDelete_whenCarBelongsToDriverAndNoFutureTrips() {
-        Driver driver = buildDriver("driver@test.com");
+        User user = buildUser("driver@test.com");
+        DriverProfile driverProfile = buildDriverProfile(user);
         UUID carId = UUID.randomUUID();
-        Car car = buildCar(carId, driver);
+        Car car = buildCar(carId, driverProfile);
 
-        when(userRepository.findByEmail("driver@test.com")).thenReturn(Optional.of(driver));
+        when(userRepository.findByEmail("driver@test.com")).thenReturn(Optional.of(user));
+        when(driverProfileRepository.findByUserId(user.getId())).thenReturn(Optional.of(driverProfile));
         when(carRepository.findById(carId)).thenReturn(Optional.of(car));
         when(carRepository.countFutureAvailableTripsForCar(carId)).thenReturn(0L);
         when(carRepository.save(any(Car.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -101,10 +109,12 @@ class CarServiceTest {
 
     @Test
     void deleteCar_shouldThrowResourceNotFoundException_whenCarNotFound() {
-        Driver driver = buildDriver("driver@test.com");
+        User user = buildUser("driver@test.com");
+        DriverProfile driverProfile = buildDriverProfile(user);
         UUID carId = UUID.randomUUID();
 
-        when(userRepository.findByEmail("driver@test.com")).thenReturn(Optional.of(driver));
+        when(userRepository.findByEmail("driver@test.com")).thenReturn(Optional.of(user));
+        when(driverProfileRepository.findByUserId(user.getId())).thenReturn(Optional.of(driverProfile));
         when(carRepository.findById(carId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> carService.deleteCar(carId, "driver@test.com"))
@@ -114,12 +124,15 @@ class CarServiceTest {
 
     @Test
     void deleteCar_shouldThrowAccessDeniedException_whenCarBelongsToAnotherDriver() {
-        Driver driver = buildDriver("driver@test.com");
-        Driver otherDriver = buildDriver("other@test.com");
+        User user = buildUser("driver@test.com");
+        DriverProfile driverProfile = buildDriverProfile(user);
+        User otherUser = buildUser("other@test.com");
+        DriverProfile otherProfile = buildDriverProfile(otherUser);
         UUID carId = UUID.randomUUID();
-        Car car = buildCar(carId, otherDriver);
+        Car car = buildCar(carId, otherProfile);
 
-        when(userRepository.findByEmail("driver@test.com")).thenReturn(Optional.of(driver));
+        when(userRepository.findByEmail("driver@test.com")).thenReturn(Optional.of(user));
+        when(driverProfileRepository.findByUserId(user.getId())).thenReturn(Optional.of(driverProfile));
         when(carRepository.findById(carId)).thenReturn(Optional.of(car));
 
         assertThatThrownBy(() -> carService.deleteCar(carId, "driver@test.com"))
@@ -128,11 +141,13 @@ class CarServiceTest {
 
     @Test
     void deleteCar_shouldThrowBusinessException_whenFutureAvailableTripExists() {
-        Driver driver = buildDriver("driver@test.com");
+        User user = buildUser("driver@test.com");
+        DriverProfile driverProfile = buildDriverProfile(user);
         UUID carId = UUID.randomUUID();
-        Car car = buildCar(carId, driver);
+        Car car = buildCar(carId, driverProfile);
 
-        when(userRepository.findByEmail("driver@test.com")).thenReturn(Optional.of(driver));
+        when(userRepository.findByEmail("driver@test.com")).thenReturn(Optional.of(user));
+        when(driverProfileRepository.findByUserId(user.getId())).thenReturn(Optional.of(driverProfile));
         when(carRepository.findById(carId)).thenReturn(Optional.of(car));
         when(carRepository.countFutureAvailableTripsForCar(carId)).thenReturn(1L);
 
@@ -143,8 +158,9 @@ class CarServiceTest {
 
     @Test
     void deleteCar_shouldThrowAccessDeniedException_whenUserIsNotDriver() {
-        Passenger passenger = buildPassenger("passenger@test.com");
-        when(userRepository.findByEmail("passenger@test.com")).thenReturn(Optional.of(passenger));
+        User user = buildUser("passenger@test.com");
+        when(userRepository.findByEmail("passenger@test.com")).thenReturn(Optional.of(user));
+        when(driverProfileRepository.findByUserId(user.getId())).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> carService.deleteCar(UUID.randomUUID(), "passenger@test.com"))
                 .isInstanceOf(AccessDeniedException.class);
@@ -154,12 +170,14 @@ class CarServiceTest {
 
     @Test
     void getMyCars_shouldReturnDriverCars_whenDriverHasCars() {
-        Driver driver = buildDriver("driver@test.com");
-        Car car1 = buildCar(UUID.randomUUID(), driver);
-        Car car2 = buildCar(UUID.randomUUID(), driver);
+        User user = buildUser("driver@test.com");
+        DriverProfile driverProfile = buildDriverProfile(user);
+        Car car1 = buildCar(UUID.randomUUID(), driverProfile);
+        Car car2 = buildCar(UUID.randomUUID(), driverProfile);
 
-        when(userRepository.findByEmail("driver@test.com")).thenReturn(Optional.of(driver));
-        when(carRepository.findByDriver_IdAndIsActiveTrue(driver.getId()))
+        when(userRepository.findByEmail("driver@test.com")).thenReturn(Optional.of(user));
+        when(driverProfileRepository.findByUserId(user.getId())).thenReturn(Optional.of(driverProfile));
+        when(carRepository.findByDriver_UserIdAndIsActiveTrue(driverProfile.getUserId()))
                 .thenReturn(List.of(car1, car2));
 
         List<CarResponse> result = carService.getMyCars("driver@test.com");
@@ -170,10 +188,12 @@ class CarServiceTest {
 
     @Test
     void getMyCars_shouldReturnEmptyList_whenDriverHasNoCars() {
-        Driver driver = buildDriver("driver@test.com");
+        User user = buildUser("driver@test.com");
+        DriverProfile driverProfile = buildDriverProfile(user);
 
-        when(userRepository.findByEmail("driver@test.com")).thenReturn(Optional.of(driver));
-        when(carRepository.findByDriver_IdAndIsActiveTrue(driver.getId())).thenReturn(List.of());
+        when(userRepository.findByEmail("driver@test.com")).thenReturn(Optional.of(user));
+        when(driverProfileRepository.findByUserId(user.getId())).thenReturn(Optional.of(driverProfile));
+        when(carRepository.findByDriver_UserIdAndIsActiveTrue(driverProfile.getUserId())).thenReturn(List.of());
 
         List<CarResponse> result = carService.getMyCars("driver@test.com");
 
@@ -191,35 +211,30 @@ class CarServiceTest {
 
     // --- helpers ---
 
-    private Driver buildDriver(String email) {
-        Driver d = new Driver();
-        d.setId(UUID.randomUUID());
-        d.setEmail(email);
-        d.setPasswordHash("hashed");
-        d.setFirstName("Jean");
-        d.setLastName("Dupont");
-        d.setIsActive(true);
-        d.setLicenseVerified(false);
-        d.setTotalTripsDriven(0);
-        return d;
+    private User buildUser(String email) {
+        return User.builder()
+                .id(UUID.randomUUID())
+                .email(email)
+                .passwordHash("hashed")
+                .firstName("Jean")
+                .lastName("Dupont")
+                .isActive(true)
+                .build();
     }
 
-    private Passenger buildPassenger(String email) {
-        Passenger p = new Passenger();
-        p.setId(UUID.randomUUID());
-        p.setEmail(email);
-        p.setPasswordHash("hashed");
-        p.setFirstName("Alice");
-        p.setLastName("Martin");
-        p.setIsActive(true);
-        p.setTotalTripsDone(0);
-        return p;
+    private DriverProfile buildDriverProfile(User user) {
+        return DriverProfile.builder()
+                .userId(user.getId())
+                .user(user)
+                .avgRating(BigDecimal.ZERO)
+                .totalTripsDriven(0)
+                .build();
     }
 
-    private Car buildCar(UUID id, Driver driver) {
+    private Car buildCar(UUID id, DriverProfile driverProfile) {
         Car car = new Car();
         car.setId(id);
-        car.setDriver(driver);
+        car.setDriver(driverProfile);
         car.setBrand("Renault");
         car.setModel("Clio");
         car.setColor("Blue");

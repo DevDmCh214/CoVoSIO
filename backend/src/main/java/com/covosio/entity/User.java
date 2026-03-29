@@ -1,29 +1,17 @@
 package com.covosio.entity;
 
 import jakarta.persistence.*;
-import lombok.Getter;
-import lombok.Setter;
-import lombok.NoArgsConstructor;
-import lombok.experimental.SuperBuilder;
+import lombok.*;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-/**
- * Abstract base entity for all user types (Passenger, Driver, Admin).
- * Uses JPA Joined Table (TPT) inheritance strategy.
- * The dtype discriminator column allows role-based filtering without extra JOINs.
- */
 @Entity
 @Table(name = "users")
-@Inheritance(strategy = InheritanceType.JOINED)
-@DiscriminatorColumn(name = "dtype", discriminatorType = DiscriminatorType.STRING)
-@Getter
-@Setter
-@NoArgsConstructor
-@SuperBuilder
-public abstract class User {
+@Getter @Setter @NoArgsConstructor
+@Builder
+@AllArgsConstructor
+public class User {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -48,11 +36,8 @@ public abstract class User {
     @Column(name = "avatar_url", length = 500)
     private String avatarUrl;
 
-    /** Average rating (1.00–5.00), meaningful for drivers. */
-    @Column(name = "avg_rating", precision = 3, scale = 2)
-    private BigDecimal avgRating = BigDecimal.ZERO;
-
     @Column(name = "is_active", nullable = false)
+    @Builder.Default
     private Boolean isActive = true;
 
     @Column(name = "created_at", nullable = false, updatable = false)
@@ -60,8 +45,6 @@ public abstract class User {
 
     @PrePersist
     protected void onCreate() {
-        if (createdAt == null) {
-            createdAt = LocalDateTime.now();
-        }
+        if (createdAt == null) createdAt = LocalDateTime.now();
     }
 }

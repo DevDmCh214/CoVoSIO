@@ -27,7 +27,7 @@ public class Trip {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "driver_id", nullable = false)
-    private Driver driver;
+    private DriverProfile driver;
 
     /** Nullable — SET NULL if the car is later hard-deleted. Validated non-null at service level. */
     @ManyToOne(fetch = FetchType.LAZY)

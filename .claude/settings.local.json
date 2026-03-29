@@ -3,7 +3,17 @@
     "allow": [
       "Bash(git commit:*)",
       "Bash(/c/CoVoSIO/.env:*)",
-      "Bash(docker compose:*)"
+      "Bash(docker compose:*)",
+      "Bash(JAVA_HOME=\"C:\\\\Program Files\\\\Java\\\\jdk-21.0.10\" \"C:\\\\Program Files\\\\apache-maven-3.9.14\\\\bin\\\\mvn\" compile -f c:/CoVoSIO/backend/pom.xml)",
+      "Bash(sed -n '1,50p' c:/CoVoSIO/backend/src/test/java/com/covosio/unit/CarServiceTest.java)",
+      "Bash(sed -n '35,90p' c:/CoVoSIO/backend/src/test/java/com/covosio/unit/CarServiceTest.java)",
+      "Bash(sed -n '275,400p' c:/CoVoSIO/backend/src/test/java/com/covosio/unit/ReservationServiceTest.java)",
+      "Bash(sed -n '1,45p' c:/CoVoSIO/backend/src/test/java/com/covosio/unit/ReservationServiceTest.java)",
+      "Bash(sed -n '180,260p' c:/CoVoSIO/backend/src/test/java/com/covosio/unit/ReviewServiceTest.java)",
+      "Bash(sed -n '1,45p' c:/CoVoSIO/backend/src/test/java/com/covosio/unit/ReviewServiceTest.java)",
+      "Bash(sed -n '1,20p' c:/CoVoSIO/backend/src/test/java/com/covosio/unit/UserServiceTest.java)",
+      "Bash(sed -n '148,180p' c:/CoVoSIO/backend/src/test/java/com/covosio/unit/UserServiceTest.java)",
+      "Bash(sed -n '280,340p' c:/CoVoSIO/backend/src/test/java/com/covosio/unit/DocumentServiceTest.java)"
     ]
   }
 }
