@@ -1,29 +1,19 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { AuthProvider } from './context/AuthContext'
 import Home from './pages/Home'
+import Login from './pages/Login'
+import Register from './pages/Register'
 
 export default function App() {
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Home />} />
-        {/* Placeholder routes — filled in later phases */}
-        <Route
-          path="/login"
-          element={
-            <div className="flex items-center justify-center h-screen text-gray-400 text-sm">
-              Login — coming soon
-            </div>
-          }
-        />
-        <Route
-          path="/register"
-          element={
-            <div className="flex items-center justify-center h-screen text-gray-400 text-sm">
-              Register — coming soon
-            </div>
-          }
-        />
-      </Routes>
+      <AuthProvider>
+        <Routes>
+          <Route path="/"         element={<Home />} />
+          <Route path="/login"    element={<Login />} />
+          <Route path="/register" element={<Register />} />
+        </Routes>
+      </AuthProvider>
     </BrowserRouter>
   )
 }

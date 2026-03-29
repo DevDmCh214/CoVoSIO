@@ -1,6 +1,15 @@
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext'
 
 export default function Navbar() {
+  const { user, logout } = useAuth()
+  const navigate = useNavigate()
+
+  async function handleLogout() {
+    await logout()
+    navigate('/')
+  }
+
   return (
     <header className="bg-white shadow-sm sticky top-0 z-[1000]">
       <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between gap-4">
@@ -22,20 +31,37 @@ export default function Navbar() {
           Share the road, share the journey
         </p>
 
-        {/* Auth buttons */}
+        {/* Auth area */}
         <div className="flex items-center gap-2 shrink-0">
-          <Link
-            to="/login"
-            className="px-4 py-2 text-sm font-medium text-blue-600 border border-blue-600 rounded-lg hover:bg-blue-50 transition-colors"
-          >
-            Login
-          </Link>
-          <Link
-            to="/register"
-            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            Register
-          </Link>
+          {user ? (
+            <>
+              <span className="hidden sm:block text-sm text-gray-600">
+                Hi,{' '}
+                <span className="font-semibold text-gray-800">{user.firstName}</span>
+              </span>
+              <button
+                onClick={handleLogout}
+                className="px-4 py-2 text-sm font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Logout
+              </button>
+            </>
+          ) : (
+            <>
+              <Link
+                to="/login"
+                className="px-4 py-2 text-sm font-medium text-blue-600 border border-blue-600 rounded-lg hover:bg-blue-50 transition-colors"
+              >
+                Login
+              </Link>
+              <Link
+                to="/register"
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Register
+              </Link>
+            </>
+          )}
         </div>
       </div>
     </header>
