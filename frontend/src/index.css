@@ -1,0 +1,24 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Prevent Leaflet controls from being clipped by Tailwind resets */
+.leaflet-container {
+  width: 100%;
+  height: 100%;
+  font-family: inherit;
+}
+
+/*
+ * Tailwind preflight sets `svg { display: block }` globally.
+ * Leaflet's overlay SVG needs overflow: visible so CircleMarkers / Polylines
+ * are never clipped at the SVG element boundary.
+ */
+.leaflet-overlay-pane svg {
+  overflow: visible;
+}
+
+/* Ensure Leaflet panes stack above the tile layer */
+.leaflet-pane {
+  z-index: auto;
+}
