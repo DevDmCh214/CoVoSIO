@@ -13,7 +13,11 @@
       "Bash(sed -n '1,45p' c:/CoVoSIO/backend/src/test/java/com/covosio/unit/ReviewServiceTest.java)",
       "Bash(sed -n '1,20p' c:/CoVoSIO/backend/src/test/java/com/covosio/unit/UserServiceTest.java)",
       "Bash(sed -n '148,180p' c:/CoVoSIO/backend/src/test/java/com/covosio/unit/UserServiceTest.java)",
-      "Bash(sed -n '280,340p' c:/CoVoSIO/backend/src/test/java/com/covosio/unit/DocumentServiceTest.java)"
+      "Bash(sed -n '280,340p' c:/CoVoSIO/backend/src/test/java/com/covosio/unit/DocumentServiceTest.java)",
+      "Bash(for f:*)",
+      "Bash(do echo:*)",
+      "Read(//c/CoVoSIO/backend/src/main/java/com/covosio/dto/**)",
+      "Bash(xargs grep:*)"
     ]
   }
 }
