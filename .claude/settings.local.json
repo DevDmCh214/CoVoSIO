@@ -17,7 +17,8 @@
       "Bash(for f:*)",
       "Bash(do echo:*)",
       "Read(//c/CoVoSIO/backend/src/main/java/com/covosio/dto/**)",
-      "Bash(xargs grep:*)"
+      "Bash(xargs grep:*)",
+      "Bash(JAVA_HOME=\"C:\\\\Program Files\\\\Java\\\\jdk-21.0.10\" \"C:\\\\Program Files\\\\apache-maven-3.9.14\\\\bin\\\\mvn\" test -f backend/pom.xml)"
     ]
   }
 }

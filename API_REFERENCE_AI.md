@@ -25,10 +25,11 @@
 ## IDENTITY MODEL
 
 - `users` table = all platform users (passengers + drivers share the same row)
-- `passenger_profiles` = created at registration, always exists for every user
-- `driver_profiles` = created only when a driver application is APPROVED; its existence means the user is a driver
+- `passenger_profiles` = created at registration, always exists for every user; stores `avgRating` + `ratingCount` for passenger reviews
+- `driver_profiles` = created when a driver application is APPROVED; its existence means the user has driver capability
 - `admins` = fully separate table, separate auth; no row in `users`
-- **Role detection:** `DRIVER` if `driver_profiles` row exists, else `PASSENGER`
+- **Role:** stored as `users.role` column (`PASSENGER` | `DRIVER`) — single source of truth. Set on registration (`PASSENGER`), updated atomically when an application is APPROVED or role is changed via admin. Kept in sync with `driver_profiles` existence.
+- `avgRating` is role-aware: DRIVER rating served from `driver_profiles.avg_rating`; PASSENGER rating from `passenger_profiles.avg_rating`. Both updated by `ReviewService` after each review + `ratingCount` incremented.
 - **Email uniqueness** is enforced across both `users` and `admins` tables
 
 ---
@@ -72,6 +73,8 @@
 
 **UserProfileResponse:** `{id, email, firstName, lastName, phone, avatarUrl, avgRating, isActive, createdAt, role}`
 **PublicUserResponse:** `{id, firstName, lastName, avatarUrl, avgRating, role}`
+
+> `avgRating` is fetched from the role-appropriate profile table (`driver_profiles` for DRIVER, `passenger_profiles` for PASSENGER). Null if the user has not yet received any reviews.
 
 | Method | Path | Auth | Body | Returns | Errors |
 |--------|------|------|------|---------|--------|
@@ -133,7 +136,7 @@
 
 | Method | Path | Auth | Body | Returns | Errors |
 |--------|------|------|------|---------|--------|
-| POST | `/reservations/{reservationId}/review` | party to reservation | `{rating(1-5), comment?(max1000)}` Direction auto-inferred: driver_profiles row + trip ownership → DRIVER_TO_PASSENGER, else PASSENGER_TO_DRIVER. R04 R05 | 201 ReviewResponse | 400 403 404 |
+| POST | `/reservations/{reservationId}/review` | party to reservation | `{rating(1-5), comment?(max1000)}` Direction auto-inferred: `users.role = DRIVER` + trip ownership → DRIVER_TO_PASSENGER, else PASSENGER_TO_DRIVER. R04 R05 | 201 ReviewResponse | 400 403 404 |
 
 ---
 
@@ -161,6 +164,7 @@
 **AdminUserResponse:** `{id, email, firstName, lastName, phone, avatarUrl, avgRating, isActive, createdAt, role, licenseVerified, licenseNumber?, permissions?}`
 
 > `licenseVerified` = true when a `driver_profiles` row exists for this user. `permissions` only present for ADMIN role users.
+> `avgRating` reflects the role-appropriate profile: `driver_profiles.avg_rating` for DRIVER, `passenger_profiles.avg_rating` for PASSENGER.
 
 ### Users
 
@@ -168,7 +172,7 @@
 |--------|------|------|---------|--------|
 | GET | `/admin/users` | pagination | 200 Page\<AdminUserResponse\> | — |
 | GET | `/admin/users/{id}` | — | 200 AdminUserResponse | 404 |
-| PUT | `/admin/users/{id}/role` | `{role: PASSENGER\|DRIVER}` Blocked if driver has trips | 200 AdminUserResponse | 400 404 |
+| PUT | `/admin/users/{id}/role` | `{role: PASSENGER\|DRIVER}` Blocked if driver has trips. Updates `users.role` + creates/removes `driver_profiles` row atomically. | 200 AdminUserResponse | 400 404 |
 | PUT | `/admin/users/{id}/status` | `{active: bool}` R11: suspension revokes all tokens | 200 AdminUserResponse | 404 |
 | DELETE | `/admin/users/{id}` | — Soft-delete (is_active=false) + R11 | 204 | 404 |
 
@@ -200,7 +204,7 @@
 | Method | Path | Notes | Returns | Errors |
 |--------|------|-------|---------|--------|
 | GET | `/admin/applications` | Query: `status?(PENDING\|APPROVED\|REJECTED)` + pagination | 200 Page\<DriverApplicationResponse\> | 400 |
-| PUT | `/admin/applications/{id}/review` | `{status: APPROVED\|REJECTED, rejectionReason?(required if REJECTED)}` APPROVED → inserts `driver_profiles` row; user gains ROLE_DRIVER on next login (R08). REJECTED → sets rejection reason. Already-reviewed applications return 400. | 200 DriverApplicationResponse | 400 404 |
+| PUT | `/admin/applications/{id}/review` | `{status: APPROVED\|REJECTED, rejectionReason?(required if REJECTED)}` APPROVED → inserts `driver_profiles` row + sets `users.role = DRIVER` immediately (R08). REJECTED → sets rejection reason. Already-reviewed applications return 400. | 200 DriverApplicationResponse | 400 404 |
 
 ### Documents (CAR_REGISTRATION only — LICENSE review is via Applications)
 

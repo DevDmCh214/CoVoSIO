@@ -63,11 +63,11 @@ public class ReviewService {
                     "Reviews can only be submitted after the trip is completed (R04)");
         }
 
-        // Determine direction and target based on the caller's role
+        // Determine direction and target based on the caller's role (R08: role is the single source)
         ReviewDirection direction;
         User target;
 
-        boolean isDriver = driverProfileRepository.existsByUserId(author.getId())
+        boolean isDriver = author.getRole() == Role.DRIVER
                 && trip.getDriver().getUserId().equals(author.getId());
 
         if (isDriver) {
@@ -113,24 +113,26 @@ public class ReviewService {
 
     /**
      * Recomputes the driver's average rating from all reviews they have received
-     * and persists the updated value.
+     * and increments their ratingCount. Persists the updated profile.
      */
     private void recalculateDriverRating(User driverUser) {
         driverProfileRepository.findByUserId(driverUser.getId()).ifPresent(dp -> {
             double newAvg = reviewRepository.findAverageRatingByTargetId(driverUser.getId()).orElse(0.0);
             dp.setAvgRating(BigDecimal.valueOf(newAvg).setScale(2, RoundingMode.HALF_UP));
+            dp.setRatingCount(dp.getRatingCount() + 1);
             driverProfileRepository.save(dp);
         });
     }
 
     /**
      * Recomputes the passenger's average rating from all reviews they have received
-     * and persists the updated value.
+     * and increments their ratingCount. Persists the updated profile.
      */
     private void recalculatePassengerRating(User passengerUser) {
         passengerProfileRepository.findByUserId(passengerUser.getId()).ifPresent(pp -> {
             double newAvg = reviewRepository.findAverageRatingByTargetId(passengerUser.getId()).orElse(0.0);
             pp.setAvgRating(BigDecimal.valueOf(newAvg).setScale(2, RoundingMode.HALF_UP));
+            pp.setRatingCount(pp.getRatingCount() + 1);
             passengerProfileRepository.save(pp);
         });
     }

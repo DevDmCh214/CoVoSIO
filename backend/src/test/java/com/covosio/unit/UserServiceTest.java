@@ -8,6 +8,7 @@ import com.covosio.entity.User;
 import com.covosio.exception.BusinessException;
 import com.covosio.exception.ResourceNotFoundException;
 import com.covosio.repository.DriverProfileRepository;
+import com.covosio.repository.PassengerProfileRepository;
 import com.covosio.repository.UserRepository;
 import com.covosio.service.UserService;
 import org.junit.jupiter.api.Test;
@@ -23,13 +24,15 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
+import static org.mockito.ArgumentMatchers.eq;
 
 @ExtendWith(MockitoExtension.class)
 class UserServiceTest {
 
-    @Mock private UserRepository          userRepository;
-    @Mock private DriverProfileRepository driverProfileRepository;
-    @Mock private PasswordEncoder         passwordEncoder;
+    @Mock private UserRepository             userRepository;
+    @Mock private DriverProfileRepository    driverProfileRepository;
+    @Mock private PassengerProfileRepository passengerProfileRepository;
+    @Mock private PasswordEncoder            passwordEncoder;
 
     @InjectMocks
     private UserService userService;
@@ -40,6 +43,7 @@ class UserServiceTest {
     void getMyProfile_shouldReturnProfile_whenUserExists() {
         User user = buildUser("alice@test.com");
         when(userRepository.findByEmail("alice@test.com")).thenReturn(Optional.of(user));
+        when(passengerProfileRepository.findByUserId(user.getId())).thenReturn(Optional.empty());
 
         UserProfileResponse response = userService.getMyProfile("alice@test.com");
 
@@ -64,6 +68,7 @@ class UserServiceTest {
         User user = buildUser("alice@test.com");
         when(userRepository.findByEmail("alice@test.com")).thenReturn(Optional.of(user));
         when(userRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(passengerProfileRepository.findByUserId(user.getId())).thenReturn(Optional.empty());
 
         UpdateProfileRequest request = new UpdateProfileRequest("Bob", "Jones", "0611111111", null);
 
@@ -129,6 +134,7 @@ class UserServiceTest {
         UUID userId = UUID.randomUUID();
         User user = buildUser("alice@test.com");
         when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(passengerProfileRepository.findByUserId(user.getId())).thenReturn(Optional.empty());
 
         PublicUserResponse response = userService.getPublicProfile(userId);
 

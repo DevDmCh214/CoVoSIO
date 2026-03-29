@@ -43,16 +43,14 @@ class ReviewServiceTest {
 
     @Test
     void createReview_shouldCreateReview_whenPassengerReviewsDriver() {
-        User driverUser    = buildUser("driver@test.com");
+        User driverUser    = buildUser("driver@test.com", Role.DRIVER);
         DriverProfile driverProfile = buildDriverProfile(driverUser);
-        User passenger     = buildUser("pass@test.com");
+        User passenger     = buildUser("pass@test.com", Role.PASSENGER);
         Trip trip          = buildTrip(driverProfile, TripStatus.COMPLETED);
         Reservation reservation = buildReservation(trip, passenger);
 
         when(userRepository.findByEmail("pass@test.com")).thenReturn(Optional.of(passenger));
         when(reservationRepository.findById(reservation.getId())).thenReturn(Optional.of(reservation));
-        // passenger is not a driver
-        when(driverProfileRepository.existsByUserId(passenger.getId())).thenReturn(false);
         when(reviewRepository.existsByReservation_IdAndDirection(
                 reservation.getId(), ReviewDirection.PASSENGER_TO_DRIVER)).thenReturn(false);
         when(reviewRepository.save(any(Review.class))).thenAnswer(inv -> {
@@ -73,22 +71,21 @@ class ReviewServiceTest {
         assertThat(response.getRating()).isEqualTo(5);
         assertThat(response.getComment()).isEqualTo("Great driver!");
         assertThat(driverProfile.getAvgRating()).isEqualByComparingTo("4.50");
+        assertThat(driverProfile.getRatingCount()).isEqualTo(1);
         verify(reviewRepository).save(any(Review.class));
         verify(driverProfileRepository).save(driverProfile);
     }
 
     @Test
     void createReview_shouldCreateReview_whenDriverReviewsPassenger() {
-        User driverUser    = buildUser("driver@test.com");
+        User driverUser    = buildUser("driver@test.com", Role.DRIVER);
         DriverProfile driverProfile = buildDriverProfile(driverUser);
-        User passenger     = buildUser("pass@test.com");
+        User passenger     = buildUser("pass@test.com", Role.PASSENGER);
         Trip trip          = buildTrip(driverProfile, TripStatus.COMPLETED);
         Reservation reservation = buildReservation(trip, passenger);
 
         when(userRepository.findByEmail("driver@test.com")).thenReturn(Optional.of(driverUser));
         when(reservationRepository.findById(reservation.getId())).thenReturn(Optional.of(reservation));
-        // driver is a driver and owns the trip
-        when(driverProfileRepository.existsByUserId(driverUser.getId())).thenReturn(true);
         when(reviewRepository.existsByReservation_IdAndDirection(
                 reservation.getId(), ReviewDirection.DRIVER_TO_PASSENGER)).thenReturn(false);
         when(reviewRepository.save(any(Review.class))).thenAnswer(inv -> {
@@ -111,9 +108,9 @@ class ReviewServiceTest {
 
     @Test
     void createReview_shouldThrowBusinessException_whenTripNotCompleted() {
-        User driverUser    = buildUser("driver@test.com");
+        User driverUser    = buildUser("driver@test.com", Role.DRIVER);
         DriverProfile driverProfile = buildDriverProfile(driverUser);
-        User passenger     = buildUser("pass@test.com");
+        User passenger     = buildUser("pass@test.com", Role.PASSENGER);
         Trip trip          = buildTrip(driverProfile, TripStatus.AVAILABLE); // not completed
         Reservation reservation = buildReservation(trip, passenger);
 
@@ -130,15 +127,14 @@ class ReviewServiceTest {
 
     @Test
     void createReview_shouldThrowBusinessException_whenReviewAlreadyExists() {
-        User driverUser    = buildUser("driver@test.com");
+        User driverUser    = buildUser("driver@test.com", Role.DRIVER);
         DriverProfile driverProfile = buildDriverProfile(driverUser);
-        User passenger     = buildUser("pass@test.com");
+        User passenger     = buildUser("pass@test.com", Role.PASSENGER);
         Trip trip          = buildTrip(driverProfile, TripStatus.COMPLETED);
         Reservation reservation = buildReservation(trip, passenger);
 
         when(userRepository.findByEmail("pass@test.com")).thenReturn(Optional.of(passenger));
         when(reservationRepository.findById(reservation.getId())).thenReturn(Optional.of(reservation));
-        when(driverProfileRepository.existsByUserId(passenger.getId())).thenReturn(false);
         when(reviewRepository.existsByReservation_IdAndDirection(
                 reservation.getId(), ReviewDirection.PASSENGER_TO_DRIVER)).thenReturn(true);
 
@@ -152,16 +148,15 @@ class ReviewServiceTest {
 
     @Test
     void createReview_shouldThrowAccessDeniedException_whenPassengerNotOwner() {
-        User driverUser    = buildUser("driver@test.com");
+        User driverUser    = buildUser("driver@test.com", Role.DRIVER);
         DriverProfile driverProfile = buildDriverProfile(driverUser);
-        User passenger     = buildUser("pass@test.com");
-        User other         = buildUser("other@test.com");
+        User passenger     = buildUser("pass@test.com", Role.PASSENGER);
+        User other         = buildUser("other@test.com", Role.PASSENGER);
         Trip trip          = buildTrip(driverProfile, TripStatus.COMPLETED);
         Reservation reservation = buildReservation(trip, other); // owned by 'other'
 
         when(userRepository.findByEmail("pass@test.com")).thenReturn(Optional.of(passenger));
         when(reservationRepository.findById(reservation.getId())).thenReturn(Optional.of(reservation));
-        when(driverProfileRepository.existsByUserId(passenger.getId())).thenReturn(false);
 
         assertThatThrownBy(() ->
                 reviewService.createReview("pass@test.com", reservation.getId(), buildRequest(4, null)))
@@ -170,18 +165,17 @@ class ReviewServiceTest {
 
     @Test
     void createReview_shouldThrowAccessDeniedException_whenDriverNotOwner() {
-        User driverUser     = buildUser("driver@test.com");
+        User driverUser     = buildUser("driver@test.com", Role.DRIVER);
         DriverProfile driverProfile = buildDriverProfile(driverUser);
-        User otherDriverUser = buildUser("other@test.com");
+        User otherDriverUser = buildUser("other@test.com", Role.DRIVER);
         DriverProfile otherProfile = buildDriverProfile(otherDriverUser);
-        User passenger      = buildUser("pass@test.com");
+        User passenger      = buildUser("pass@test.com", Role.PASSENGER);
         Trip trip           = buildTrip(otherProfile, TripStatus.COMPLETED); // owned by other driver
         Reservation reservation = buildReservation(trip, passenger);
 
         when(userRepository.findByEmail("driver@test.com")).thenReturn(Optional.of(driverUser));
         when(reservationRepository.findById(reservation.getId())).thenReturn(Optional.of(reservation));
-        // driver@test.com has a driver profile, but is NOT the trip driver
-        when(driverProfileRepository.existsByUserId(driverUser.getId())).thenReturn(true);
+        // driverUser has DRIVER role but is NOT the trip's driver — falls through to AccessDenied
 
         assertThatThrownBy(() ->
                 reviewService.createReview("driver@test.com", reservation.getId(), buildRequest(3, null)))
@@ -190,7 +184,7 @@ class ReviewServiceTest {
 
     @Test
     void createReview_shouldThrowResourceNotFoundException_whenReservationNotFound() {
-        User passenger     = buildUser("pass@test.com");
+        User passenger     = buildUser("pass@test.com", Role.PASSENGER);
         UUID reservationId = UUID.randomUUID();
 
         when(userRepository.findByEmail("pass@test.com")).thenReturn(Optional.of(passenger));
@@ -204,7 +198,7 @@ class ReviewServiceTest {
 
     // --- helpers ---
 
-    private User buildUser(String email) {
+    private User buildUser(String email, Role role) {
         return User.builder()
                 .id(UUID.randomUUID())
                 .email(email)
@@ -212,6 +206,7 @@ class ReviewServiceTest {
                 .firstName("Jean")
                 .lastName("Dupont")
                 .isActive(true)
+                .role(role)
                 .build();
     }
 
@@ -220,6 +215,7 @@ class ReviewServiceTest {
                 .userId(user.getId())
                 .user(user)
                 .avgRating(BigDecimal.ZERO)
+                .ratingCount(0)
                 .totalTripsDriven(0)
                 .build();
     }

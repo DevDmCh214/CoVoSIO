@@ -25,6 +25,11 @@ public class PassengerProfile {
     @Builder.Default
     private BigDecimal avgRating = BigDecimal.ZERO;
 
+    /** Number of reviews received as a passenger (DRIVER_TO_PASSENGER direction). */
+    @Column(name = "rating_count")
+    @Builder.Default
+    private Integer ratingCount = 0;
+
     @Column(name = "total_trips_done")
     @Builder.Default
     private Integer totalTripsDone = 0;

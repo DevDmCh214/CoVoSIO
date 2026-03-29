@@ -10,7 +10,6 @@ import com.covosio.entity.User;
 import com.covosio.exception.BusinessException;
 import com.covosio.exception.ResourceNotFoundException;
 import com.covosio.repository.AdminRepository;
-import com.covosio.repository.DriverProfileRepository;
 import com.covosio.repository.PassengerProfileRepository;
 import com.covosio.repository.RefreshTokenRepository;
 import com.covosio.repository.UserRepository;
@@ -40,7 +39,6 @@ public class AuthService {
 
     private final UserRepository userRepository;
     private final AdminRepository adminRepository;
-    private final DriverProfileRepository driverProfileRepository;
     private final PassengerProfileRepository passengerProfileRepository;
     private final RefreshTokenRepository refreshTokenRepository;
     private final PasswordEncoder passwordEncoder;
@@ -132,8 +130,7 @@ public class AuthService {
             UserDetails userDetails = userDetailsService.loadUserByUsername(user.getEmail());
             String accessToken = jwtUtil.generateAccessToken(userDetails);
             String refreshToken = createAndPersistRefreshToken(user);
-            String role = driverProfileRepository.existsByUserId(user.getId()) ? "DRIVER" : "PASSENGER";
-            return buildAuthResponse(accessToken, refreshToken, user, role);
+            return buildAuthResponse(accessToken, refreshToken, user, user.getRole().name());
         }
 
         throw new BusinessException("Invalid email or password");
@@ -164,9 +161,8 @@ public class AuthService {
         User user = stored.getUser();
         UserDetails userDetails = userDetailsService.loadUserByUsername(user.getEmail());
         String newAccessToken = jwtUtil.generateAccessToken(userDetails);
-        String role = driverProfileRepository.existsByUserId(user.getId()) ? "DRIVER" : "PASSENGER";
 
-        return buildAuthResponse(newAccessToken, stored.getToken(), user, role);
+        return buildAuthResponse(newAccessToken, stored.getToken(), user, user.getRole().name());
     }
 
     /**

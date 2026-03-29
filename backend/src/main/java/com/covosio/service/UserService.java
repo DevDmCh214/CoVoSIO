@@ -4,16 +4,19 @@ import com.covosio.dto.ChangePasswordRequest;
 import com.covosio.dto.PublicUserResponse;
 import com.covosio.dto.UpdateProfileRequest;
 import com.covosio.dto.UserProfileResponse;
+import com.covosio.entity.Role;
 import com.covosio.entity.User;
 import com.covosio.exception.BusinessException;
 import com.covosio.exception.ResourceNotFoundException;
 import com.covosio.repository.DriverProfileRepository;
+import com.covosio.repository.PassengerProfileRepository;
 import com.covosio.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.UUID;
 
 /**
@@ -24,9 +27,10 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class UserService {
 
-    private final UserRepository userRepository;
-    private final DriverProfileRepository driverProfileRepository;
-    private final PasswordEncoder passwordEncoder;
+    private final UserRepository              userRepository;
+    private final DriverProfileRepository     driverProfileRepository;
+    private final PassengerProfileRepository  passengerProfileRepository;
+    private final PasswordEncoder             passwordEncoder;
 
     /**
      * Returns the full profile of the currently authenticated user (UC-C05).
@@ -84,7 +88,7 @@ public class UserService {
 
     /**
      * Returns the public profile of any user by their ID (UC-C08).
-     * Exposes only non-sensitive fields: name, avatar, and role.
+     * Exposes only non-sensitive fields: name, avatar, role, and avgRating.
      *
      * @param id the target user's UUID
      * @return PublicUserResponse with public fields only
@@ -112,9 +116,10 @@ public class UserService {
                 .lastName(user.getLastName())
                 .phone(user.getPhone())
                 .avatarUrl(user.getAvatarUrl())
+                .avgRating(resolveAvgRating(user))
                 .isActive(user.getIsActive())
                 .createdAt(user.getCreatedAt())
-                .role(resolveRole(user))
+                .role(user.getRole().name())
                 .build();
     }
 
@@ -124,11 +129,23 @@ public class UserService {
                 .firstName(user.getFirstName())
                 .lastName(user.getLastName())
                 .avatarUrl(user.getAvatarUrl())
-                .role(resolveRole(user))
+                .avgRating(resolveAvgRating(user))
+                .role(user.getRole().name())
                 .build();
     }
 
-    private String resolveRole(User user) {
-        return driverProfileRepository.existsByUserId(user.getId()) ? "DRIVER" : "PASSENGER";
+    /**
+     * Fetches avgRating from the correct profile table based on the user's role.
+     * Returns null if the profile is not found.
+     */
+    private BigDecimal resolveAvgRating(User user) {
+        if (user.getRole() == Role.DRIVER) {
+            return driverProfileRepository.findByUserId(user.getId())
+                    .map(dp -> dp.getAvgRating())
+                    .orElse(null);
+        }
+        return passengerProfileRepository.findByUserId(user.getId())
+                .map(pp -> pp.getAvgRating())
+                .orElse(null);
     }
 }

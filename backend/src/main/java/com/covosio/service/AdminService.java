@@ -95,8 +95,7 @@ public class AdminService {
                     "Invalid role: " + newRoleStr + ". Allowed: PASSENGER, DRIVER");
         }
 
-        boolean isDriver = driverProfileRepository.existsByUserId(userId);
-        String currentRole = isDriver ? "DRIVER" : "PASSENGER";
+        String currentRole = user.getRole().name();
 
         if (currentRole.equals(newRole)) {
             return toAdminUserResponse(user);
@@ -105,6 +104,8 @@ public class AdminService {
         if ("DRIVER".equals(newRole)) {
             DriverProfile dp = DriverProfile.builder().user(user).build();
             driverProfileRepository.save(dp);
+            user.setRole(com.covosio.entity.Role.DRIVER);
+            userRepository.save(user);
         } else {
             // PASSENGER — remove driver profile
             if (tripRepository.existsByDriver_UserId(userId)) {
@@ -112,6 +113,8 @@ public class AdminService {
                         "Cannot remove driver role: driver has existing trips. Remove them first.");
             }
             driverProfileRepository.deleteById(userId);
+            user.setRole(com.covosio.entity.Role.PASSENGER);
+            userRepository.save(user);
         }
 
         return toAdminUserResponse(user);
@@ -431,11 +434,14 @@ public class AdminService {
         applicationRepository.save(application);
 
         if (request.getStatus() == ApplicationStatus.APPROVED) {
-            // Create driver_profiles row — the promotion
+            // Create driver_profiles row and promote user role
             DriverProfile driverProfile = DriverProfile.builder()
                     .user(application.getUser())
                     .build();
             driverProfileRepository.save(driverProfile);
+            User applicant = application.getUser();
+            applicant.setRole(com.covosio.entity.Role.DRIVER);
+            userRepository.save(applicant);
         }
 
         return toApplicationResponse(application);
@@ -491,8 +497,7 @@ public class AdminService {
     }
 
     private AdminUserResponse toAdminUserResponse(User user) {
-        Optional<DriverProfile> dp = driverProfileRepository.findByUserId(user.getId());
-        String role = dp.isPresent() ? "DRIVER" : "PASSENGER";
+        String role = user.getRole().name();
         AdminUserResponse.AdminUserResponseBuilder builder = AdminUserResponse.builder()
                 .id(user.getId())
                 .email(user.getEmail())
@@ -500,13 +505,17 @@ public class AdminService {
                 .lastName(user.getLastName())
                 .phone(user.getPhone())
                 .avatarUrl(user.getAvatarUrl())
-                .avgRating(dp.map(DriverProfile::getAvgRating).orElse(null))
                 .isActive(user.getIsActive())
                 .createdAt(user.getCreatedAt())
                 .role(role);
 
-        if (dp.isPresent()) {
-            builder.licenseNumber(dp.get().getLicenseNumber());
+        if (user.getRole() == com.covosio.entity.Role.DRIVER) {
+            Optional<DriverProfile> dp = driverProfileRepository.findByUserId(user.getId());
+            builder.avgRating(dp.map(DriverProfile::getAvgRating).orElse(null));
+            dp.ifPresent(d -> builder.licenseNumber(d.getLicenseNumber()));
+        } else {
+            passengerProfileRepository.findByUserId(user.getId())
+                    .ifPresent(pp -> builder.avgRating(pp.getAvgRating()));
         }
 
         return builder.build();
