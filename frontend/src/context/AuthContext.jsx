@@ -37,8 +37,14 @@ export function AuthProvider({ children }) {
     setUser(null)
   }
 
+  function updateUser(patch) {
+    const updated = { ...user, ...patch }
+    localStorage.setItem('user', JSON.stringify(updated))
+    setUser(updated)
+  }
+
   return (
-    <AuthContext.Provider value={{ user, login, logout }}>
+    <AuthContext.Provider value={{ user, login, logout, updateUser }}>
       {children}
     </AuthContext.Provider>
   )
